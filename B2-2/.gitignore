@@ -21,3 +21,6 @@ Thumbs.db
 
 # 로그
 *.log
+
+# 옵시디언 환경설정
+.obsidian/
