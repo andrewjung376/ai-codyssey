@@ -3,3 +3,8 @@
 
 # Claude Code나 Codex 관련 워크플로에서 함께 사용될 수 있는 폴더
 /.agents/
+
+# B1-3
+/B1-3/.env
+/B1-3/.n8n_data/
+/B1-3/captures/private/

@@ -1,0 +1,6 @@
+{
+  "ticket_id": "T-001",
+  "route": "URGENT",
+  "sla": "1시간 이내",
+  "message": "긴급 문의로 접수되었습니다."
+}

@@ -1,0 +1,224 @@
+{
+  "name": "P1 고객 문의 우선순위 자동 분류",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "customer-inquiry",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "de552f3d-10da-46a0-b51a-1d5c8cd9273e",
+      "name": "문의 접수 Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-620, 0],
+      "webhookId": "project1-customer-inquiry"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1a6d6706-4741-41dd-bf43-f539bdc17e88",
+              "name": "ticket_id",
+              "value": "={{ $json.body.ticket_id }}",
+              "type": "string"
+            },
+            {
+              "id": "a47243c1-8fe3-442a-afc7-ce25265cb44e",
+              "name": "requester",
+              "value": "={{ $json.body.requester }}",
+              "type": "string"
+            },
+            {
+              "id": "d18e2904-a2df-4de8-95cb-8b6735589da4",
+              "name": "priority",
+              "value": "={{ $json.body.priority }}",
+              "type": "string"
+            },
+            {
+              "id": "b1fcaaee-51b8-4648-b279-85cbd0d029ec",
+              "name": "subject",
+              "value": "={{ $json.body.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "02792442-b719-4c00-a588-f838be27ced1",
+              "name": "message",
+              "value": "={{ $json.body.message }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "053008c1-d19c-4608-b6ac-4f65325899f5",
+      "name": "입력값 정리",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-400, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bfe28f3b-bf61-4483-8ea0-a109af539920",
+              "leftValue": "={{ $json.priority }}",
+              "rightValue": "urgent",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c669c0f0-512a-4d9b-879b-792cb899eb4b",
+      "name": "긴급 여부 판단",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-160, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "96cd7bb4-0d05-4f84-b476-a4c8e6110b55",
+              "name": "ticket_id",
+              "value": "={{ $json.ticket_id }}",
+              "type": "string"
+            },
+            {
+              "id": "c5396133-f040-46b6-9b42-4ec6e3308400",
+              "name": "route",
+              "value": "URGENT",
+              "type": "string"
+            },
+            {
+              "id": "0fa9510a-32bf-4530-b6a5-eb51fe37a4db",
+              "name": "sla",
+              "value": "1시간 이내",
+              "type": "string"
+            },
+            {
+              "id": "a3b62d3f-f5bc-4588-b5ec-985874a3fb00",
+              "name": "message",
+              "value": "긴급 문의로 접수되었습니다.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1423ee9-b0dc-4f23-be28-e0ada5a820fa",
+      "name": "긴급 처리 결과",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [80, -120]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "962cfb52-2e0a-465b-bcd8-34aa862b0280",
+              "name": "ticket_id",
+              "value": "={{ $json.ticket_id }}",
+              "type": "string"
+            },
+            {
+              "id": "f9b87cd9-85d4-44de-8457-75f2781c3920",
+              "name": "route",
+              "value": "NORMAL",
+              "type": "string"
+            },
+            {
+              "id": "65802c16-203d-4af7-a813-7d148091bd82",
+              "name": "sla",
+              "value": "24시간 이내",
+              "type": "string"
+            },
+            {
+              "id": "67546448-aa44-4370-9083-49a512c0620b",
+              "name": "message",
+              "value": "일반 문의로 접수되었습니다.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a09078af-dd09-466c-8f46-66d327d0f62c",
+      "name": "일반 처리 결과",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [80, 120]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "efb81b75-abde-46eb-9a1e-b7c1fa84fab5",
+      "name": "긴급 응답",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [340, -120]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "a2988a79-a952-4616-b2b7-6c86b9a2ecf8",
+      "name": "일반 응답",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [340, 120]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "문의 접수 Webhook": {
+      "main": [[{"node": "입력값 정리", "type": "main", "index": 0}]]
+    },
+    "입력값 정리": {
+      "main": [[{"node": "긴급 여부 판단", "type": "main", "index": 0}]]
+    },
+    "긴급 여부 판단": {
+      "main": [
+        [{"node": "긴급 처리 결과", "type": "main", "index": 0}],
+        [{"node": "일반 처리 결과", "type": "main", "index": 0}]
+      ]
+    },
+    "긴급 처리 결과": {
+      "main": [[{"node": "긴급 응답", "type": "main", "index": 0}]]
+    },
+    "일반 처리 결과": {
+      "main": [[{"node": "일반 응답", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Seoul"
+  },
+  "versionId": "29fa1750-619d-4591-8a6f-94102685b7d7",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

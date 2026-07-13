@@ -1,0 +1,195 @@
+{
+  "name": "P2 웹 서비스 자동 상태 점검",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "2639e980-0237-44ec-946d-a2678cfec4a0",
+      "name": "15분마다 자동 실행",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-600, 0]
+    },
+    {
+      "parameters": {
+        "url": "http://127.0.0.1:5678/healthz",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "a4115d9e-cd05-4d77-9c0a-6e908279a51c",
+      "name": "서비스 상태 확인",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [-360, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c4d16932-19cf-4fbf-bca6-166666b92420",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "44c5d735-ce3b-4ac2-ab54-f84435e921ed",
+      "name": "정상 응답 여부 판단",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-120, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id":"dc4ea5f5-bc85-4aac-b80e-479b91233131","name":"checked_at","value":"={{ $now.toISO() }}","type":"string"},
+            {"id":"dd8450af-990d-4919-83bf-5a573b4ce71d","name":"target_url","value":"http://127.0.0.1:5678/healthz","type":"string"},
+            {"id":"26f90f68-9485-40ae-92dc-cd061c05ef75","name":"status_code","value":"={{ String($json.statusCode) }}","type":"string"},
+            {"id":"27fed154-3400-4cbf-90e0-36dcf01fb379","name":"result","value":"NORMAL","type":"string"},
+            {"id":"6e7ba41a-b1fa-4641-a171-6b018df750f3","name":"detail","value":"서비스가 정상 응답했습니다.","type":"string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "cbcd5f08-53b3-4262-a82e-4ebc4c338be0",
+      "name": "정상 결과 생성",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [120, -120]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id":"c96db7f2-df06-4e2a-816c-936a53ef6f1c","name":"checked_at","value":"={{ $now.toISO() }}","type":"string"},
+            {"id":"66051546-a8e5-4007-a8be-38b604076f84","name":"target_url","value":"http://127.0.0.1:5678/healthz","type":"string"},
+            {"id":"ed58109f-e7e5-4585-8506-b14417793b14","name":"status_code","value":"={{ String($json.statusCode) }}","type":"string"},
+            {"id":"e937330e-ce54-482c-b839-0c7f0e551b84","name":"result","value":"FAILURE","type":"string"},
+            {"id":"d917c076-24c5-42c8-b627-f1d37f61d7ee","name":"detail","value":"서비스가 정상 상태 코드를 반환하지 않았습니다.","type":"string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "2bfbdf1c-a705-4bea-8d85-922980a43269",
+      "name": "장애 결과 생성",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [120, 120]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "k4zqkTe1DWpIWmqt",
+          "mode": "list",
+          "cachedResultName": "P2 서비스 상태 점검 이력",
+          "cachedResultUrl": "/projects/pdLNnKBbRmVlf3qb/datatables/k4zqkTe1DWpIWmqt"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "checked_at": "={{ $json.checked_at }}",
+            "target_url": "={{ $json.target_url }}",
+            "status_code": "={{ $json.status_code }}",
+            "result": "={{ $json.result }}",
+            "detail": "={{ $json.detail }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {"id":"checked_at","displayName":"checked_at","required":false,"defaultMatch":false,"display":true,"type":"string","readOnly":false,"removed":false},
+            {"id":"target_url","displayName":"target_url","required":false,"defaultMatch":false,"display":true,"type":"string","readOnly":false,"removed":false},
+            {"id":"status_code","displayName":"status_code","required":false,"defaultMatch":false,"display":true,"type":"string","readOnly":false,"removed":false},
+            {"id":"result","displayName":"result","required":false,"defaultMatch":false,"display":true,"type":"string","readOnly":false,"removed":false},
+            {"id":"detail","displayName":"detail","required":false,"defaultMatch":false,"display":true,"type":"string","readOnly":false,"removed":false}
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "4e8829ae-2076-4488-b223-461040917d82",
+      "name": "정상 이력 저장",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [380, -120]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "k4zqkTe1DWpIWmqt",
+          "mode": "list",
+          "cachedResultName": "P2 서비스 상태 점검 이력",
+          "cachedResultUrl": "/projects/pdLNnKBbRmVlf3qb/datatables/k4zqkTe1DWpIWmqt"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "checked_at": "={{ $json.checked_at }}",
+            "target_url": "={{ $json.target_url }}",
+            "status_code": "={{ $json.status_code }}",
+            "result": "={{ $json.result }}",
+            "detail": "={{ $json.detail }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {"id":"checked_at","displayName":"checked_at","required":false,"defaultMatch":false,"display":true,"type":"string","readOnly":false,"removed":false},
+            {"id":"target_url","displayName":"target_url","required":false,"defaultMatch":false,"display":true,"type":"string","readOnly":false,"removed":false},
+            {"id":"status_code","displayName":"status_code","required":false,"defaultMatch":false,"display":true,"type":"string","readOnly":false,"removed":false},
+            {"id":"result","displayName":"result","required":false,"defaultMatch":false,"display":true,"type":"string","readOnly":false,"removed":false},
+            {"id":"detail","displayName":"detail","required":false,"defaultMatch":false,"display":true,"type":"string","readOnly":false,"removed":false}
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "4e4b44a5-d112-49c3-94f3-d11a07fc6e3e",
+      "name": "장애 이력 저장",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [380, 120]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "15분마다 자동 실행": {"main":[[{"node":"서비스 상태 확인","type":"main","index":0}]]},
+    "서비스 상태 확인": {"main":[[{"node":"정상 응답 여부 판단","type":"main","index":0}]]},
+    "정상 응답 여부 판단": {"main":[[{"node":"정상 결과 생성","type":"main","index":0}],[{"node":"장애 결과 생성","type":"main","index":0}]]},
+    "정상 결과 생성": {"main":[[{"node":"정상 이력 저장","type":"main","index":0}]]},
+    "장애 결과 생성": {"main":[[{"node":"장애 이력 저장","type":"main","index":0}]]}
+  },
+  "active": false,
+  "settings": {"executionOrder":"v1","timezone":"Asia/Seoul"},
+  "versionId": "fb4e2fcb-e277-48f4-8ea8-12fce6cdbffd",
+  "meta": {"templateCredsSetupCompleted":true},
+  "tags": []
+}

@@ -1,0 +1,7 @@
+{
+  "ticket_id": "T-001",
+  "requester": "테스트고객A",
+  "priority": "urgent",
+  "subject": "결제 오류",
+  "message": "결제가 중복으로 처리되었습니다."
+}
