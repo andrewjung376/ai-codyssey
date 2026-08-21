@@ -1,5 +1,8 @@
 # 네이토 평가 파일 제외
 /B1-1/네이토_평가_260613.txt
+/B1-1/Phase1_LLM모델비교선정보고서.docx
+/B1-1/Phase2_시스템설계문서.docx
+/B1-1/Phase3_실행로그.docx
 
 # Claude Code나 Codex 관련 워크플로에서 함께 사용될 수 있는 폴더
 /.agents/
