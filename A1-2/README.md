@@ -161,6 +161,19 @@ python travel_planner.py -date "2026-03-15"
 | Kakao Local 실패(네트워크/401/403) 또는 0건 | `errors`에 기록 후 "데이터 없음"으로 계속 진행 |
 | OpenAI 1차 추천 JSON 파싱 실패 | 필수 키만 다시 JSON으로 출력하도록 프롬프트를 수정해 최대 1회 재시도 |
 
+### Kakao Local 401/403 발생 시 점검 항목
+
+`search_restaurants()`는 401/403을 받으면 `errors`에 `AUTH_ERROR`로 기록하고 "데이터 없음"으로 계속 진행하지만(위 표 참고), 근본 원인은 아래 순서로 점검한다. `errors[].message`에 Kakao 응답 본문(`response.text`)이 그대로 담겨 있으므로, `results/{date}_raw_data.json`을 먼저 확인한다.
+
+| 점검 항목 | 확인 방법 |
+|---|---|
+| 1. 요청 헤더 형식 | `Authorization` 헤더 값이 `KakaoAK {REST_API_키}` 형식인지 확인한다. `Bearer`가 아니다. (`search_restaurants()`의 `headers` 딕셔너리 참고) |
+| 2. 키 값 위치/오타 | `.env`의 `KAKAO_REST_API_KEY`에 앞뒤 공백·줄바꿈이 없는지, REST API 키(Admin/JavaScript/네이티브 앱 키 아님)를 넣었는지 확인한다. Kakao Developers → 내 애플리케이션 → 앱 키에서 재확인. |
+| 3. 앱의 서비스 활성화 여부 | Kakao Developers → 앱 → 제품 설정 → 카카오맵(지도/로컬)이 활성화(ON)되어 있는지 확인한다. 비활성 상태면 키가 정확해도 `errorType: NotAuthorizedError, message: "App(...) disabled OPEN_MAP_AND_LOCAL service."` 형태의 403이 발생한다. |
+| 4. 앱 상태 | 앱이 비활성화·제재 상태가 아닌지 앱 목록에서 확인한다. |
+
+(이 항목은 실제 개발 중 3번 원인으로 403이 발생했던 사례를 근거로 작성했다. `doc/faq.md` Q13 참고)
+
 ## 에러 경로 테스트 방법
 
 정상 실행 외에, 아래 항목은 별도 방법으로 재현/검증한다.
