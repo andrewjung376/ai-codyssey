@@ -18,14 +18,20 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="여행 날짜를 입력받아 국내 여행지를 추천하고 맛집 정보를 담은 리포트를 생성한다."
     )
-    parser.add_argument("-date", required=True, help='여행 날짜, 형식: "YYYY-MM-DD"')
+    parser.add_argument(
+        "-date",
+        required=True,
+        help='여행 날짜. 형식: "YYYY-MM-DD" (연 4자리-월 2자리-일 2자리), 예: "2026-03-15"',
+    )
     args = parser.parse_args()
 
     try:
         datetime.strptime(args.date, "%Y-%m-%d")
     except ValueError:
         parser.print_usage(sys.stderr)
-        print('오류: 날짜 형식이 올바르지 않습니다. 예) -date "2026-03-15"', file=sys.stderr)
+        print(f'오류: 날짜 형식이 올바르지 않습니다. 입력값: "{args.date}"', file=sys.stderr)
+        print('허용 형식: "YYYY-MM-DD" (연 4자리-월 2자리-일 2자리)', file=sys.stderr)
+        print('예) -date "2026-03-15"', file=sys.stderr)
         sys.exit(1)
 
     return args.date
