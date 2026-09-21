@@ -10,6 +10,18 @@
 4. 원본 데이터(JSON)와 최종 리포트(Markdown)를 `results/` 폴더에 저장한다.
 5. **(캐싱)** 같은 `-date`로 다시 실행하면 저장된 원본 JSON을 재사용해 1·2단계 API 호출을 건너뛰고, 리포트만 새로 생성한다.
 
+### 단계 ↔ 함수 매핑
+
+| 단계 | 함수 | 파일 위치 |
+|---|---|---|
+| 날짜 검증 | `parse_args()` | [travel_planner.py](travel_planner.py) |
+| API 키 확인 | `load_api_keys()` | 〃 |
+| 캐시 확인 | `load_cached_raw_data()` | 〃 |
+| [1/3] 1차 추천 | `request_recommendation()` → `validate_recommendation()` | 〃 |
+| [2/3] 맛집 검색 | `search_restaurants_by_city()` → 지역마다 `search_restaurants()` | 〃 |
+| [3/3] 리포트 생성 | `generate_report()` → `build_report_prompt()` | 〃 |
+| 결과 저장 | `save_results()` | 〃 |
+
 ### 단계별 입력/출력 예시
 
 **[1/3] 1차 추천 (`request_recommendation()`)**

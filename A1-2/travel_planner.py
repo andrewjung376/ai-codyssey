@@ -14,6 +14,8 @@ RESTAURANT_COUNT = 5
 RESULTS_DIR = "results"
 MIN_CITIES = 2
 MAX_CITIES = 3
+NO_DATA_TEXT = "데이터 없음"
+RAW_RESPONSE_PREVIEW_LEN = 200
 
 
 def parse_args():
@@ -106,11 +108,20 @@ def validate_recommendation(data):
             missing = required_sub_keys - (city_info.keys() if isinstance(city_info, dict) else set())
             raise ValueError(f"recommended_cities 항목의 필수 키 누락: {missing}")
 
+        for key in ("city", "weather", "reason"):
+            if not isinstance(city_info[key], str):
+                raise ValueError(f"'{key}'는 string이어야 함 (실제 타입: {type(city_info[key]).__name__})")
+
+        events = city_info["events"]
+        if not isinstance(events, list) or not all(isinstance(e, str) for e in events):
+            raise ValueError(f"'events'는 string 배열이어야 함 (실제: {events})")
+
 
 def request_recommendation(client, date, errors):
     messages = [{"role": "user", "content": build_recommendation_prompt(date)}]
 
     for attempt in range(2):
+        content = None
         try:
             response = client.chat.completions.create(
                 model=OPENAI_MODEL,
@@ -122,12 +133,19 @@ def request_recommendation(client, date, errors):
             validate_recommendation(data)
             return data
         except (json.JSONDecodeError, ValueError) as e:
+            preview = None
+            if content:
+                preview = content[:RAW_RESPONSE_PREVIEW_LEN]
+                if len(content) > RAW_RESPONSE_PREVIEW_LEN:
+                    preview += "..."
             errors.append({
                 "step": "recommendation",
                 "type": "PARSE_ERROR",
                 "message": f"JSON 파싱 실패 (시도 {attempt + 1}/2): {e}",
+                "raw_response_preview": preview,
             })
             if attempt == 0:
+                print(f"  - 재시도 사유: {e} → 필수 키만 다시 요청합니다.")
                 messages = [{"role": "user", "content": build_recommendation_prompt(date, retry=True)}]
                 continue
             return None
@@ -204,7 +222,7 @@ def search_restaurants_by_city(kakao_key, recommendation, errors):
         if restaurants:
             print(f"  - [{city}] 맛집 {len(restaurants)}곳 검색 완료")
         else:
-            print(f"  - [{city}] 데이터 없음 (검색 결과 0건 또는 실패)")
+            print(f"  - [{city}] {NO_DATA_TEXT} (검색 결과 0건 또는 실패)")
     return restaurants_by_city
 
 
@@ -215,7 +233,7 @@ def build_report_prompt(date, recommendation, restaurants_by_city, errors):
         f"아래 정보를 바탕으로 {date} 국내 여행 추천 리포트를 Markdown으로 작성해줘.\n"
         f"추천 지역은 총 {len(recommendation['recommended_cities'])}곳이며, 리포트는 지역별로 구분해서 정리해야 해.\n\n"
         f"[지역별 추천 정보]\n{json.dumps(recommendation, ensure_ascii=False, indent=2)}\n\n"
-        f"[지역별 맛집 목록] (키: 지역명, 값: 맛집 리스트, 빈 리스트면 데이터 없음)\n{restaurants_text}\n\n"
+        f"[지역별 맛집 목록] (키: 지역명, 값: 맛집 리스트, 빈 리스트면 \"{NO_DATA_TEXT}\")\n{restaurants_text}\n\n"
         "리포트는 반드시 아래 구조를 따르고, 순수 Markdown 텍스트만 출력해 (코드블록으로 감싸지 마).\n"
         "모든 텍스트는 한글로만 작성해 (한자, 일본어 등 다른 문자를 섞지 마):\n"
         f"# {date} 국내 여행 추천 리포트\n"
@@ -225,7 +243,7 @@ def build_report_prompt(date, recommendation, restaurants_by_city, errors):
         "- 추천 이유\n"
         "- 날씨 요약\n"
         "- 행사/축제\n"
-        "- 맛집 추천 (맛집 데이터가 없으면 \"데이터 없음\"이라고 표기)\n"
+        f"- 맛집 추천 (맛집 데이터가 없으면 \"{NO_DATA_TEXT}\"라고 표기)\n"
         "- 1일 일정 제안 (오전/오후/저녁 수준으로 간단히)\n"
         "## 오류 요약(errors)\n"
         f"(아래 오류 목록을 표기, 없으면 \"오류 없음\"이라고 표기)\n{json.dumps(errors, ensure_ascii=False)}"
