@@ -1,0 +1,102 @@
+# 국내 여행 추천 프로그램
+
+여행 날짜를 입력하면 LLM(OpenAI)이 여행지를 추천하고, Kakao Local API로 해당 지역의 맛집을 검색한 뒤, 두 결과를 종합해 최종 여행 리포트(Markdown)를 생성하는 CLI 프로그램이다.
+
+## 개요
+
+1. **[1/3]** OpenAI에 여행 날짜를 입력해 추천 지역/날씨/행사/추천 이유를 JSON으로 받는다.
+2. **[2/3]** 추천된 지역을 기준으로 Kakao Local API에서 맛집 5곳을 검색한다.
+3. **[3/3]** 1·2단계 결과를 종합해 OpenAI가 최종 여행 리포트를 Markdown으로 생성한다.
+4. 원본 데이터(JSON)와 최종 리포트(Markdown)를 `results/` 폴더에 저장한다.
+
+## 실행 방법
+
+### 1. 가상환경 생성 및 활성화
+
+**Windows PowerShell**
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+**macOS / Linux**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 2. 의존성 설치
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. API 키 설정
+
+`.env.example`을 복사해 `.env` 파일을 만들고, 발급받은 키 값을 채운다.
+
+```bash
+cp .env.example .env
+```
+
+```
+OPENAI_API_KEY=여기에_본인의_OpenAI_키
+KAKAO_REST_API_KEY=여기에_본인의_Kakao_REST_API_키
+```
+
+- OpenAI API 키: https://platform.openai.com 에서 발급
+- Kakao REST API 키: https://developers.kakao.com 에서 애플리케이션 생성 후 발급 (REST API 키 사용)
+
+### 4. 프로그램 실행
+
+```bash
+python travel_planner.py -date "2026-03-15"
+```
+
+실행하면 아래와 같이 진행 로그가 출력된다.
+
+```
+[1/3] 1차 추천 생성 중(LLM)...
+  - recommended_city: "제주"
+[2/3] 맛집 검색 중(Kakao Local)...
+  - 맛집 5곳 검색 완료
+[3/3] 최종 리포트 생성 중(LLM)...
+  - 리포트 생성 완료
+
+완료! results/2026-03-15_travel_plan.md 를 확인하세요.
+원본 데이터: results/2026-03-15_raw_data.json
+```
+
+## 결과물 확인 방법
+
+프로그램 실행 후 `results/` 폴더에 다음 파일이 생성된다.
+
+| 파일 | 내용 |
+|---|---|
+| `results/{date}_raw_data.json` | 1차 추천 JSON, 맛집 검색 결과, 오류 요약(`errors`) |
+| `results/{date}_travel_plan.md` | 추천 지역/이유, 날씨, 행사, 맛집, 1일 일정, 오류 요약이 포함된 최종 리포트 |
+
+맛집 검색이 0건이거나 Kakao API 인증(401/403) 오류가 발생해도 프로그램은 중단되지 않고, 해당 섹션을 "데이터 없음"으로 표기한 뒤 리포트 생성까지 계속 진행한다.
+
+## 오류 처리
+
+| 상황 | 동작 |
+|---|---|
+| API 키 미설정 (`OPENAI_API_KEY` 또는 `KAKAO_REST_API_KEY`) | 즉시 종료, 설정 방법 안내 출력 |
+| Kakao Local 실패(네트워크/401/403) 또는 0건 | `errors`에 기록 후 "데이터 없음"으로 계속 진행 |
+| OpenAI 1차 추천 JSON 파싱 실패 | 필수 키만 다시 JSON으로 출력하도록 프롬프트를 수정해 최대 1회 재시도 |
+
+## 보안 주의사항 (API 키 유출 방지)
+
+- **API 키를 코드에 직접 작성하지 않는다.** `.env` 파일 또는 환경변수로만 관리한다.
+- `.env` 파일은 `.gitignore`에 등록되어 있어 git에 커밋되지 않는다. 절대 수동으로 커밋하지 않는다.
+- `results/` 폴더의 결과 파일이나 로그에는 키 값이 남지 않는다. 오류 메시지에도 키 값을 출력하지 않는다.
+- 키를 공유해야 할 경우 `.env` 파일이 아니라 `.env.example`(키 이름만 있고 값은 비어 있음)을 공유한다.
+- 실수로 키를 커밋했다면 즉시 해당 키를 재발급(폐기)하고 커밋 히스토리에서 제거해야 한다.
+
+## 개발 환경
+
+- Python 3.10 이상
+- 의존성: `openai`, `requests`, `python-dotenv` (`requirements.txt` 참고)
