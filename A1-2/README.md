@@ -88,6 +88,36 @@ python travel_planner.py -date "2026-03-15"
 | Kakao Local 실패(네트워크/401/403) 또는 0건 | `errors`에 기록 후 "데이터 없음"으로 계속 진행 |
 | OpenAI 1차 추천 JSON 파싱 실패 | 필수 키만 다시 JSON으로 출력하도록 프롬프트를 수정해 최대 1회 재시도 |
 
+## 에러 경로 테스트 방법
+
+정상 실행 외에, 아래 항목은 별도 방법으로 재현/검증한다.
+
+### 1. 날짜 형식 오류 / API 키 미설정
+
+정상적으로 발생시켜 확인한다.
+
+```bash
+# 날짜 형식 오류 → 사용법 출력 후 종료
+python travel_planner.py -date "2026-13-40"
+
+# API 키 미설정 → 안내 메시지 출력 후 종료
+# (.env에서 키를 지우거나 이름을 바꾼 뒤 실행)
+python travel_planner.py -date "2026-03-15"
+```
+
+### 2. 맛집 검색 0건 / LLM JSON 파싱 실패 재시도
+
+이 두 경로는 정상적인 입력으로는 우연히 발생하기 어려워, `test_edge_cases.py`로 실제 API를 호출해 강제로 재현한다.
+
+```bash
+python test_edge_cases.py
+```
+
+- **케이스 1(맛집 0건)**: 존재할 수 없는 지명으로 Kakao Local API를 실제로 호출해 0건 응답을 유도하고, `search_restaurants()`가 `EMPTY_RESULT`를 기록하며 빈 리스트를 반환하는지 확인한다.
+- **케이스 2(JSON 파싱 실패 재시도)**: 1차 요청에서 의도적으로 다른 스키마(`city`, `temp`)를 요구해 OpenAI가 필수 키 없는 JSON을 반환하게 한 뒤, `travel_planner.py`의 재시도 프롬프트(`build_recommendation_prompt(date, retry=True)`)로 2차 요청을 보내 필수 키 4개(`recommended_city`, `weather`, `events`, `reason`)를 모두 갖춘 JSON을 받는지 확인한다.
+
+두 케이스 모두 `PASS` 문구가 출력되면 정상이며, `assert` 실패 시 예외가 발생한다. `travel_planner.py`의 프로덕션 코드는 수정하지 않고, 해당 파일의 함수를 그대로 불러와 검증한다.
+
 ## 보안 주의사항 (API 키 유출 방지)
 
 - **API 키를 코드에 직접 작성하지 않는다.** `.env` 파일 또는 환경변수로만 관리한다.
