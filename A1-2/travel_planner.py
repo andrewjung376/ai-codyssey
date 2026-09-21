@@ -12,11 +12,13 @@ OPENAI_MODEL = "gpt-4o-mini"
 KAKAO_KEYWORD_SEARCH_URL = "https://dapi.kakao.com/v2/local/search/keyword.json"
 RESTAURANT_COUNT = 5
 RESULTS_DIR = "results"
+MIN_CITIES = 2
+MAX_CITIES = 3
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="여행 날짜를 입력받아 국내 여행지를 추천하고 맛집 정보를 담은 리포트를 생성한다."
+        description="여행 날짜를 입력받아 국내 여행지 2~3곳을 추천하고 지역별 맛집 정보를 담은 리포트를 생성한다."
     )
     parser.add_argument(
         "-date",
@@ -61,23 +63,48 @@ def load_api_keys():
 
 
 def build_recommendation_prompt(date, retry=False):
+    schema_hint = (
+        '{"recommended_cities": ['
+        '{"city": "", "weather": "", "events": [], "reason": ""}, '
+        '{"city": "", "weather": "", "events": [], "reason": ""}'
+        ']}'
+    )
     if retry:
         return (
-            f"{date}에 여행하기 좋은 국내 지역을 추천해줘. "
-            "반드시 아래 4개의 키만 포함한 JSON 객체 하나만 출력해. "
+            f"{date}에 여행하기 좋은 국내 지역을 서로 다른 {MIN_CITIES}~{MAX_CITIES}곳 추천해줘. "
+            "반드시 아래 형태의 JSON 객체 하나만 출력해. recommended_cities는 배열이고, "
+            "배열의 각 항목은 city, weather, events, reason 4개 키만 가져야 해. "
             "다른 설명, 마크다운, 코드블록 없이 순수 JSON만 출력해.\n"
-            '{"recommended_city": "", "weather": "", "events": [], "reason": ""}'
+            f"{schema_hint}"
         )
     return (
-        f"{date}에 여행하기 좋은 국내 지역을 한 곳 추천해줘.\n"
+        f"{date}에 여행하기 좋은 국내 지역을 서로 다른 {MIN_CITIES}~{MAX_CITIES}곳 추천해줘.\n"
         "아래 JSON 스키마를 반드시 지켜서 출력해.\n"
-        "- recommended_city: string (예: \"제주\", \"강릉\")\n"
-        "- weather: string (해당 시기 일반적 날씨 요약)\n"
-        "- events: array of string (행사/축제 후보 1~3개)\n"
-        "- reason: string (추천 근거 2~4문장)\n"
+        f"- recommended_cities: array ({MIN_CITIES}~{MAX_CITIES}개), 각 항목은 아래 4개 키를 가진 객체\n"
+        "  - city: string (예: \"제주\", \"강릉\")\n"
+        "  - weather: string (해당 시기 그 지역의 일반적 날씨 요약)\n"
+        "  - events: array of string (그 지역의 행사/축제 후보 1~3개)\n"
+        "  - reason: string (그 지역을 추천하는 근거 2~4문장)\n"
         "실제 정확한 예보/행사 데이터가 없다면 그 시기의 일반적인 경향으로 서술해.\n"
         "모든 텍스트 값은 한글로만 작성해. 한자, 일본어 등 다른 문자를 섞지 마."
     )
+
+
+def validate_recommendation(data):
+    if "recommended_cities" not in data:
+        raise ValueError("필수 키 누락: {'recommended_cities'}")
+
+    cities = data["recommended_cities"]
+    if not isinstance(cities, list) or not (MIN_CITIES <= len(cities) <= MAX_CITIES):
+        raise ValueError(
+            f"recommended_cities는 {MIN_CITIES}~{MAX_CITIES}개의 배열이어야 함 (실제: {cities})"
+        )
+
+    required_sub_keys = {"city", "weather", "events", "reason"}
+    for city_info in cities:
+        if not isinstance(city_info, dict) or not required_sub_keys.issubset(city_info.keys()):
+            missing = required_sub_keys - (city_info.keys() if isinstance(city_info, dict) else set())
+            raise ValueError(f"recommended_cities 항목의 필수 키 누락: {missing}")
 
 
 def request_recommendation(client, date, errors):
@@ -92,11 +119,7 @@ def request_recommendation(client, date, errors):
             )
             content = response.choices[0].message.content
             data = json.loads(content)
-
-            required_keys = {"recommended_city", "weather", "events", "reason"}
-            if not required_keys.issubset(data.keys()):
-                raise ValueError(f"필수 키 누락: {required_keys - data.keys()}")
-
+            validate_recommendation(data)
             return data
         except (json.JSONDecodeError, ValueError) as e:
             errors.append({
@@ -131,6 +154,7 @@ def search_restaurants(kakao_key, city, errors):
         if response.status_code in (401, 403):
             errors.append({
                 "step": "place_search",
+                "city": city,
                 "type": "AUTH_ERROR",
                 "message": f"HTTP {response.status_code}: {response.text}",
             })
@@ -142,6 +166,7 @@ def search_restaurants(kakao_key, city, errors):
         if not documents:
             errors.append({
                 "step": "place_search",
+                "city": city,
                 "type": "EMPTY_RESULT",
                 "message": f"0 results for query={city} 맛집",
             })
@@ -162,44 +187,59 @@ def search_restaurants(kakao_key, city, errors):
     except requests.exceptions.RequestException as e:
         errors.append({
             "step": "place_search",
+            "city": city,
             "type": "NETWORK_ERROR",
             "message": str(e),
         })
         return []
 
 
-def build_report_prompt(date, recommendation, restaurants, errors):
-    restaurant_text = (
-        json.dumps(restaurants, ensure_ascii=False, indent=2)
-        if restaurants
-        else "데이터 없음 (장소 검색 결과 0건 또는 검색 실패)"
-    )
+def search_restaurants_by_city(kakao_key, recommendation, errors):
+    """추천된 지역마다 맛집을 검색해 {city: [restaurant, ...]} 형태로 반환한다."""
+    restaurants_by_city = {}
+    for city_info in recommendation["recommended_cities"]:
+        city = city_info["city"]
+        restaurants = search_restaurants(kakao_key, city, errors)
+        restaurants_by_city[city] = restaurants
+        if restaurants:
+            print(f"  - [{city}] 맛집 {len(restaurants)}곳 검색 완료")
+        else:
+            print(f"  - [{city}] 데이터 없음 (검색 결과 0건 또는 실패)")
+    return restaurants_by_city
+
+
+def build_report_prompt(date, recommendation, restaurants_by_city, errors):
+    restaurants_text = json.dumps(restaurants_by_city, ensure_ascii=False, indent=2)
 
     return (
-        f"아래 정보를 바탕으로 {date} 국내 여행 추천 리포트를 Markdown으로 작성해줘.\n\n"
-        f"[1차 추천 정보]\n{json.dumps(recommendation, ensure_ascii=False, indent=2)}\n\n"
-        f"[맛집 목록]\n{restaurant_text}\n\n"
+        f"아래 정보를 바탕으로 {date} 국내 여행 추천 리포트를 Markdown으로 작성해줘.\n"
+        f"추천 지역은 총 {len(recommendation['recommended_cities'])}곳이며, 리포트는 지역별로 구분해서 정리해야 해.\n\n"
+        f"[지역별 추천 정보]\n{json.dumps(recommendation, ensure_ascii=False, indent=2)}\n\n"
+        f"[지역별 맛집 목록] (키: 지역명, 값: 맛집 리스트, 빈 리스트면 데이터 없음)\n{restaurants_text}\n\n"
         "리포트는 반드시 아래 구조를 따르고, 순수 Markdown 텍스트만 출력해 (코드블록으로 감싸지 마).\n"
         "모든 텍스트는 한글로만 작성해 (한자, 일본어 등 다른 문자를 섞지 마):\n"
         f"# {date} 국내 여행 추천 리포트\n"
-        "## 추천 지역\n"
-        "## 추천 이유\n"
-        "## 날씨 요약\n"
-        "## 행사/축제\n"
-        "## 맛집 추천\n"
-        "(맛집 데이터가 없으면 \"데이터 없음\"이라고 표기)\n"
-        "## 1일 일정 제안\n"
-        "(오전/오후/저녁 수준으로 간단히)\n"
+        "## 지역별 추천\n"
+        "(추천된 지역 수만큼 아래 소제목을 반복)\n"
+        "### {지역명}\n"
+        "- 추천 이유\n"
+        "- 날씨 요약\n"
+        "- 행사/축제\n"
+        "- 맛집 추천 (맛집 데이터가 없으면 \"데이터 없음\"이라고 표기)\n"
+        "- 1일 일정 제안 (오전/오후/저녁 수준으로 간단히)\n"
         "## 오류 요약(errors)\n"
         f"(아래 오류 목록을 표기, 없으면 \"오류 없음\"이라고 표기)\n{json.dumps(errors, ensure_ascii=False)}"
     )
 
 
-def generate_report(client, date, recommendation, restaurants, errors):
+def generate_report(client, date, recommendation, restaurants_by_city, errors):
     try:
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
-            messages=[{"role": "user", "content": build_report_prompt(date, recommendation, restaurants, errors)}],
+            messages=[{
+                "role": "user",
+                "content": build_report_prompt(date, recommendation, restaurants_by_city, errors),
+            }],
         )
         return response.choices[0].message.content
     except Exception as e:
@@ -211,20 +251,52 @@ def generate_report(client, date, recommendation, restaurants, errors):
         return None
 
 
-def save_results(date, recommendation, restaurants, errors, report_text):
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-
-    raw_data = {
-        "date": date,
-        "recommendation": recommendation,
-        "restaurants": restaurants,
-        "errors": errors,
-    }
+def get_result_paths(date):
     json_path = os.path.join(RESULTS_DIR, f"{date}_raw_data.json")
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(raw_data, f, ensure_ascii=False, indent=2)
-
     md_path = os.path.join(RESULTS_DIR, f"{date}_travel_plan.md")
+    return json_path, md_path
+
+
+def load_cached_raw_data(json_path):
+    """같은 -date로 이미 저장된 원본 JSON이 있으면 읽어 재사용한다.
+
+    project.md 보너스 과제(결과 캐싱): 캐시가 있으면 LLM 1차 추천과
+    Kakao 맛집 검색 API 호출을 건너뛰고, 리포트만 다시 생성한다.
+    파일이 없거나 형식이 손상된 경우 None을 반환해 정상적으로 새로 조회하게 한다.
+    """
+    if not os.path.exists(json_path):
+        return None
+
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        recommendation = data["recommendation"]
+        validate_recommendation(recommendation)
+        restaurants_by_city = {item["city"]: item["items"] for item in data["restaurants"]}
+        errors = list(data.get("errors", []))
+        return recommendation, restaurants_by_city, errors
+    except (json.JSONDecodeError, KeyError, ValueError, OSError):
+        return None
+
+
+def save_results(date, recommendation, restaurants_by_city, errors, report_text, skip_raw_write=False):
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    json_path, md_path = get_result_paths(date)
+
+    if not skip_raw_write:
+        raw_data = {
+            "date": date,
+            "recommendation": recommendation,
+            "restaurants": [
+                {"city": city, "items": items}
+                for city, items in restaurants_by_city.items()
+            ],
+            "errors": errors,
+        }
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(raw_data, f, ensure_ascii=False, indent=2)
+
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(report_text or "# 리포트 생성 실패\n\n리포트 생성 중 오류가 발생했습니다.")
 
@@ -235,32 +307,41 @@ def main():
     date = parse_args()
     openai_key, kakao_key = load_api_keys()
     client = OpenAI(api_key=openai_key)
-    errors = []
 
-    print("[1/3] 1차 추천 생성 중(LLM)...")
-    recommendation = request_recommendation(client, date, errors)
-    if recommendation is None:
-        print("  - 오류: 1차 추천 생성에 실패했습니다. 프로그램을 종료합니다.", file=sys.stderr)
-        for err in errors:
-            print(f"    · {err['type']}: {err['message']}", file=sys.stderr)
-        sys.exit(1)
-    print(f"  - recommended_city: \"{recommendation.get('recommended_city')}\"")
+    json_path, _ = get_result_paths(date)
+    cached = load_cached_raw_data(json_path)
 
-    print("[2/3] 맛집 검색 중(Kakao Local)...")
-    restaurants = search_restaurants(kakao_key, recommendation["recommended_city"], errors)
-    if restaurants:
-        print(f"  - 맛집 {len(restaurants)}곳 검색 완료")
+    if cached:
+        recommendation, restaurants_by_city, errors = cached
+        cities = [c["city"] for c in recommendation["recommended_cities"]]
+        print(f"[캐시 발견] {json_path} 를 재사용합니다. 1~2단계(LLM 추천/맛집 검색) API 호출을 건너뜁니다.")
+        print(f"  - recommended_cities: {cities}")
     else:
-        print("  - 데이터 없음 (검색 결과 0건 또는 실패). '데이터 없음'으로 다음 단계 진행합니다.")
+        errors = []
+
+        print("[1/3] 1차 추천 생성 중(LLM)...")
+        recommendation = request_recommendation(client, date, errors)
+        if recommendation is None:
+            print("  - 오류: 1차 추천 생성에 실패했습니다. 프로그램을 종료합니다.", file=sys.stderr)
+            for err in errors:
+                print(f"    · {err['type']}: {err['message']}", file=sys.stderr)
+            sys.exit(1)
+        cities = [c["city"] for c in recommendation["recommended_cities"]]
+        print(f"  - recommended_cities: {cities}")
+
+        print("[2/3] 맛집 검색 중(Kakao Local)...")
+        restaurants_by_city = search_restaurants_by_city(kakao_key, recommendation, errors)
 
     print("[3/3] 최종 리포트 생성 중(LLM)...")
-    report_text = generate_report(client, date, recommendation, restaurants, errors)
+    report_text = generate_report(client, date, recommendation, restaurants_by_city, errors)
     if report_text:
         print("  - 리포트 생성 완료")
     else:
         print("  - 오류: 리포트 생성에 실패했습니다. 실패 안내 문서를 저장합니다.")
 
-    json_path, md_path = save_results(date, recommendation, restaurants, errors, report_text)
+    json_path, md_path = save_results(
+        date, recommendation, restaurants_by_city, errors, report_text, skip_raw_write=bool(cached)
+    )
     print(f"\n완료! {md_path} 를 확인하세요.")
     print(f"원본 데이터: {json_path}")
 

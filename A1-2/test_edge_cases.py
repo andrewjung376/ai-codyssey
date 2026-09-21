@@ -43,11 +43,10 @@ errors_2 = []
 bad_prompt = (
     "아무 도시나 하나 골라서 JSON으로 출력해줘. "
     '반드시 이 키만 사용해: {"city": "", "temp": ""} '
-    "recommended_city, weather, events, reason 같은 키는 절대 쓰지 마."
+    "recommended_cities 같은 키는 절대 쓰지 마."
 )
 messages = [{"role": "user", "content": bad_prompt}]
 
-required_keys = {"recommended_city", "weather", "events", "reason"}
 result = None
 
 for attempt in range(2):
@@ -61,14 +60,15 @@ for attempt in range(2):
     print(content)
     data = json.loads(content)
 
-    if not required_keys.issubset(data.keys()):
-        missing = required_keys - data.keys()
+    try:
+        tp.validate_recommendation(data)
+    except ValueError as e:
         errors_2.append({
             "step": "recommendation",
             "type": "PARSE_ERROR",
-            "message": f"필수 키 누락 (시도 {attempt + 1}/2): {missing}",
+            "message": f"스키마 검증 실패 (시도 {attempt + 1}/2): {e}",
         })
-        print(f">> 필수 키 누락 감지: {missing} (예상된 실패)")
+        print(f">> 스키마 검증 실패 감지: {e} (예상된 실패)")
         if attempt == 0:
             # 프로덕션 코드의 재시도 프롬프트를 그대로 사용
             messages = [{"role": "user", "content": tp.build_recommendation_prompt("2026-04-01", retry=True)}]
@@ -83,5 +83,7 @@ print(f"\n최종 errors: {json.dumps(errors_2, ensure_ascii=False, indent=2)}")
 print(f"최종 result: {json.dumps(result, ensure_ascii=False, indent=2)}")
 
 assert len(errors_2) == 1, f"PARSE_ERROR가 정확히 1회만 기록되어야 함 (실제: {len(errors_2)})"
-assert result is not None and required_keys.issubset(result.keys()), "재시도 후에도 필수 키를 갖춘 JSON을 받지 못함"
-print(">> PASS: 1차 시도 파싱/스키마 실패 → 재시도 프롬프트로 1회 재요청 → 필수 키 확보 확인")
+assert result is not None, "재시도 후에도 유효한 스키마의 JSON을 받지 못함"
+cities = result["recommended_cities"]
+assert tp.MIN_CITIES <= len(cities) <= tp.MAX_CITIES, f"지역 개수가 범위를 벗어남: {len(cities)}"
+print(">> PASS: 1차 시도 파싱/스키마 실패 → 재시도 프롬프트로 1회 재요청 → 지역 2~3곳 스키마 확보 확인")
