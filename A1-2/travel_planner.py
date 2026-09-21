@@ -124,6 +124,8 @@ def search_restaurants(kakao_key, city, errors):
     params = {"query": f"{city} 맛집", "size": RESTAURANT_COUNT}
 
     try:
+        # Kakao Local 키워드 검색은 GET만 지원하는 조회 전용 API라 요청 파라미터가
+        # URL 쿼리 스트링으로 노출된다. 검색어가 매우 길면 URL 길이 제약에 걸릴 수 있다.
         response = requests.get(KAKAO_KEYWORD_SEARCH_URL, headers=headers, params=params, timeout=10)
 
         if response.status_code in (401, 403):
