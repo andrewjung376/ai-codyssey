@@ -22,8 +22,19 @@ import requests
 # .env가 없으면 아무 동작도 하지 않으므로 배포 환경에 영향이 없다.
 load_dotenv()
 
-OPENAI_MODEL = "gpt-4o-mini"
-OPENAI_TIMEOUT_SECONDS = 25  # Vercel 함수 maxDuration(30초)보다 짧게 잡아 타임아웃을 서버가 직접 처리한다.
+# 1순위: Codyssey 과정에서 제공하는 OpenAI 호환 프록시. openai SDK 대신
+# requests로 직접 호출한다(제공된 예제와 동일한 방식).
+# 2순위(폴백): 프록시 호출이 실패하면 OPENAI_API_KEY + openai SDK로 재시도한다.
+CODY_CHAT_COMPLETIONS_URL = "https://copa.codyssey.kr/v1/chat/completions"
+CODY_MODEL = "gpt-5-mini"
+OPENAI_FALLBACK_MODEL = "gpt-4o-mini"
+# Vercel 함수 maxDuration(30초) 안에 "Cody 시도 + (실패 시) OpenAI 폴백"이 모두 끝나야 하므로
+# Cody 쪽 타임아웃을 짧게 잡아, 느릴 때 폴백에 쓸 시간을 남겨둔다.
+CODY_TIMEOUT_SECONDS = 28  # 실측 응답 시간(약 26초)보다 약간 여유를 둔 값
+OPENAI_TIMEOUT_SECONDS = 20
+
+KEY_SOURCE_CODY = "cody"
+KEY_SOURCE_OPENAI = "openai"
 
 KAKAO_KEYWORD_SEARCH_URL = "https://dapi.kakao.com/v2/local/search/keyword.json"
 RESTAURANT_COUNT = 5
@@ -88,12 +99,13 @@ def validate_preference(preference):
 # ---------------------------------------------------------------------------
 
 def load_api_keys():
+    cody_key = os.environ.get("CODY_OPENAI_API_KEY")
     openai_key = os.environ.get("OPENAI_API_KEY")
     kakao_key = os.environ.get("KAKAO_REST_API_KEY")
 
     missing = []
-    if not openai_key:
-        missing.append("OPENAI_API_KEY")
+    if not cody_key and not openai_key:
+        missing.append("CODY_OPENAI_API_KEY 또는 OPENAI_API_KEY")
     if not kakao_key:
         missing.append("KAKAO_REST_API_KEY")
 
@@ -102,11 +114,62 @@ def load_api_keys():
         print(f"[config error] 다음 환경변수가 설정되지 않았습니다: {', '.join(missing)}")
         raise ConfigError("서비스 설정 오류입니다.")
 
-    return openai_key, kakao_key
+    return cody_key, openai_key, kakao_key
 
 
-def get_openai_client(api_key):
-    return OpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT_SECONDS)
+def call_cody_proxy(api_key, messages, json_mode=False):
+    """Codyssey OpenAI 호환 프록시(copa.codyssey.kr)에 채팅 완성 요청을 보낸다.
+
+    openai SDK를 쓰지 않고 requests로 직접 호출한다 (제공된 예제와 동일한 방식).
+    성공 시 첫 번째 choice의 메시지 content(string)를 반환한다.
+
+    주의: 이 프록시는 response_format={"type":"json_object"}를 지원하지 않는다
+    (400 "Requested feature is not supported"). 그래서 json_mode는 여기서
+    쓰지 않고, JSON 전용 출력은 프롬프트 지시문(build_*_prompt)에만 의존한다.
+    openai SDK 폴백 경로(call_openai_sdk)에서는 정상 지원되므로 그대로 쓴다.
+    """
+    payload = {"model": CODY_MODEL, "messages": messages}
+
+    response = requests.post(
+        CODY_CHAT_COMPLETIONS_URL,
+        headers={"Authorization": f"Bearer {api_key}"},
+        json=payload,
+        timeout=CODY_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    return response.json()["choices"][0]["message"]["content"]
+
+
+def call_openai_sdk(api_key, messages, json_mode=False):
+    """폴백 경로: OPENAI_API_KEY + openai SDK로 채팅 완성 요청을 보낸다."""
+    client = OpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT_SECONDS)
+    kwargs = {"model": OPENAI_FALLBACK_MODEL, "messages": messages}
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+    response = client.chat.completions.create(**kwargs)
+    return response.choices[0].message.content
+
+
+def call_llm(cody_key, openai_key, messages, json_mode=False):
+    """1순위 Codyssey 프록시(CODY_OPENAI_API_KEY) -> 실패 시 2순위 OpenAI SDK(OPENAI_API_KEY).
+
+    성공하면 (응답 content, 사용된 키 소스: KEY_SOURCE_CODY|KEY_SOURCE_OPENAI)를 반환한다.
+    둘 다 실패하면 마지막 예외를 그대로 올린다.
+    """
+    cody_error = None
+    if cody_key:
+        try:
+            content = call_cody_proxy(cody_key, messages, json_mode=json_mode)
+            return content, KEY_SOURCE_CODY
+        except Exception as e:
+            cody_error = e
+            print(f"[cody proxy failed, falling back to OPENAI_API_KEY] {e}")
+
+    if not openai_key:
+        raise cody_error if cody_error else ConfigError("서비스 설정 오류입니다.")
+
+    content = call_openai_sdk(openai_key, messages, json_mode=json_mode)
+    return content, KEY_SOURCE_OPENAI
 
 
 # ---------------------------------------------------------------------------
@@ -170,21 +233,17 @@ def validate_recommendation(data):
             raise ValueError(f"'events'는 string 배열이어야 함 (실제: {events})")
 
 
-def request_recommendation(client, travel_date, preference, errors):
+def request_recommendation(cody_key, openai_key, travel_date, preference, errors):
+    """1차 추천을 생성한다. 성공하면 (data, key_source)를, 최종 실패하면 (None, None)을 반환한다."""
     messages = [{"role": "user", "content": build_recommendation_prompt(travel_date, preference)}]
 
     for attempt in range(2):
         content = None
         try:
-            response = client.chat.completions.create(
-                model=OPENAI_MODEL,
-                messages=messages,
-                response_format={"type": "json_object"},
-            )
-            content = response.choices[0].message.content
+            content, key_source = call_llm(cody_key, openai_key, messages, json_mode=True)
             data = json.loads(content)
             validate_recommendation(data)
-            return data
+            return data, key_source
         except (json.JSONDecodeError, ValueError) as e:
             preview = None
             if content:
@@ -203,16 +262,16 @@ def request_recommendation(client, travel_date, preference, errors):
                     "content": build_recommendation_prompt(travel_date, preference, retry=True),
                 }]
                 continue
-            return None
+            return None, None
         except Exception as e:
             errors.append({
                 "step": "recommendation",
                 "type": "API_ERROR",
-                "message": f"OpenAI 호출 실패: {e}",
+                "message": f"AI 호출 실패: {e}",
             })
-            return None
+            return None, None
 
-    return None
+    return None, None
 
 
 # ---------------------------------------------------------------------------
@@ -353,26 +412,49 @@ def validate_report_response(data, expected_city_count):
         raise ValueError("markdown은 string이어야 함")
 
 
-def generate_report(client, travel_date, recommended_cities, errors):
+def generate_report(cody_key, openai_key, travel_date, recommended_cities, errors):
+    """리포트를 생성한다. 성공하면 (data, key_source)를 반환한다.
+
+    request_recommendation()과 마찬가지로, 스키마 검증 실패(예: cities 개수 불일치) 시
+    한 번 더 같은 프롬프트로 재시도한다. LLM이 배열 길이 지시를 가끔 놓치는 것을 완화하기 위함이다.
+    """
     prompt = build_report_prompt(travel_date, recommended_cities, errors)
-    content = None
-    try:
-        response = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-        )
-        content = response.choices[0].message.content
-        data = json.loads(content)
-        validate_report_response(data, len(recommended_cities))
-        return data
-    except (json.JSONDecodeError, ValueError) as e:
-        preview = content[:RAW_RESPONSE_PREVIEW_LEN] if content else None
-        raise UpstreamError(f"리포트 응답 형식이 올바르지 않습니다: {e}") from e
-    except UpstreamError:
-        raise
-    except Exception as e:
-        raise UpstreamError(f"OpenAI 호출 실패: {e}") from e
+    messages = [{"role": "user", "content": prompt}]
+    expected_count = len(recommended_cities)
+    last_error = None
+
+    for attempt in range(2):
+        content = None
+        try:
+            content, key_source = call_llm(cody_key, openai_key, messages, json_mode=True)
+            data = json.loads(content)
+            validate_report_response(data, expected_count)
+            return data, key_source
+        except (json.JSONDecodeError, ValueError) as e:
+            preview = content[:RAW_RESPONSE_PREVIEW_LEN] if content else None
+            last_error = f"{e} (raw preview: {preview})" if preview else str(e)
+            if attempt == 0:
+                messages = [
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": content or ""},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"방금 응답이 스키마를 어겼어({e}). "
+                            f"cities는 정확히 {expected_count}개여야 하고, 각 항목은 city/summary/schedule"
+                            "(morning/afternoon/evening)를 모두 가져야 해. markdown도 포함해서 "
+                            "같은 JSON 스키마로 다시 전체를 출력해."
+                        ),
+                    },
+                ]
+                continue
+            raise UpstreamError(f"리포트 응답 형식이 올바르지 않습니다: {last_error}") from e
+        except UpstreamError:
+            raise
+        except Exception as e:
+            raise UpstreamError(f"AI 호출 실패: {e}") from e
+
+    raise UpstreamError(f"리포트 응답 형식이 올바르지 않습니다: {last_error}")
 
 
 # ---------------------------------------------------------------------------
@@ -392,13 +474,12 @@ def handle_recommend(payload):
     travel_date = validate_date_str(payload.get("date"))
     preference = validate_preference(payload.get("preference"))
 
-    openai_key, kakao_key = load_api_keys()
-    client = get_openai_client(openai_key)
+    cody_key, openai_key, kakao_key = load_api_keys()
 
     errors = []
     date_str = travel_date.isoformat()
 
-    recommendation = request_recommendation(client, date_str, preference, errors)
+    recommendation, key_source = request_recommendation(cody_key, openai_key, date_str, preference, errors)
     if recommendation is None:
         raise UpstreamError("1차 추천 생성에 실패했습니다.")
 
@@ -407,6 +488,7 @@ def handle_recommend(payload):
     return {
         "recommended_cities": recommendation["recommended_cities"],
         "errors": errors,
+        "ai_key_source": key_source,
     }
 
 
@@ -414,7 +496,8 @@ def handle_report(payload):
     """POST /api (action="report") 처리. A1-2의 리포트 생성에 대응."""
     travel_date, recommended_cities, errors = validate_report_request(payload)
 
-    openai_key, _ = load_api_keys()
-    client = get_openai_client(openai_key)
+    cody_key, openai_key, _ = load_api_keys()
 
-    return generate_report(client, travel_date.isoformat(), recommended_cities, errors)
+    data, key_source = generate_report(cody_key, openai_key, travel_date.isoformat(), recommended_cities, errors)
+    data["ai_key_source"] = key_source
+    return data

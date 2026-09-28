@@ -11,7 +11,9 @@
   // ---------------------------------------------------------------------
   var MAX_PREFERENCE_LEN = 200;
   var SLOW_WARNING_MS = 8000; // 8초 경과 시 "조금 더 걸리고 있어요" 안내
-  var REQUEST_TIMEOUT_MS = 30000; // 30초 경과 시 요청 중단
+  // 서버는 1순위 Cody 프록시(최대 28초) 실패 시 2순위 OpenAI 폴백(최대 20초)까지
+  // 시도하므로, 정상적인 폴백 흐름도 끊기지 않도록 Vercel 함수 제한(60초)에 맞춰 넉넉히 잡는다.
+  var REQUEST_TIMEOUT_MS = 55000; // 55초 경과 시 요청 중단
   var THEME_KEY = "trippick:theme";
   var RECOMMEND_CACHE_PREFIX = "trippick:recommend:";
   var RECENT_KEY = "trippick:recent";
@@ -41,6 +43,7 @@
   var skeletonArea = document.getElementById("skeletonArea");
   var resultArea = document.getElementById("resultArea");
   var resultDateLabel = document.getElementById("resultDateLabel");
+  var aiKeySourceLabel = document.getElementById("aiKeySourceLabel");
   var cityCards = document.getElementById("cityCards");
   var errorSummary = document.getElementById("errorSummary");
   var downloadBtn = document.getElementById("downloadBtn");
@@ -295,8 +298,31 @@
   // ---------------------------------------------------------------------
   // 결과 렌더링
   // ---------------------------------------------------------------------
-  function renderResults(date, cities, reportCities, markdown, errors) {
+  var AI_KEY_SOURCE_LABELS = {
+    cody: "Codyssey 프록시 (gpt-5-mini)",
+    openai: "OpenAI 직접 호출 (gpt-4o-mini, 폴백)",
+  };
+
+  function renderAiKeySource(recommendKeySource, reportKeySource) {
+    var recLabel = AI_KEY_SOURCE_LABELS[recommendKeySource];
+    var repLabel = AI_KEY_SOURCE_LABELS[reportKeySource];
+
+    if (!recLabel && !repLabel) {
+      aiKeySourceLabel.hidden = true;
+      return;
+    }
+
+    var text = "🔑 AI 응답 출처 — 추천: " + (recLabel || "알 수 없음");
+    if (repLabel) {
+      text += " · 리포트: " + repLabel;
+    }
+    aiKeySourceLabel.textContent = text;
+    aiKeySourceLabel.hidden = false;
+  }
+
+  function renderResults(date, cities, reportCities, markdown, errors, recommendKeySource, reportKeySource) {
     resultDateLabel.textContent = date + " 추천 결과";
+    renderAiKeySource(recommendKeySource, reportKeySource);
     cityCards.innerHTML = "";
 
     var reportByCity = {};
@@ -523,7 +549,9 @@
             cities,
             reportResult.data.cities,
             reportResult.data.markdown,
-            recommendErrors
+            recommendErrors,
+            result.data.ai_key_source,
+            reportResult.data.ai_key_source
           );
           saveRecent(
             date,
