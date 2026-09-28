@@ -376,9 +376,13 @@ def build_report_prompt(travel_date, recommended_cities, errors):
     schema_hint = (
         '{"cities": ['
         '{"city": "", "summary": "", "schedule": {"morning": "", "afternoon": "", "evening": ""}}'
-        '], "markdown": ""}'
+        ']}'
     )
 
+    # 다운로드용 Markdown(맛집 카카오맵 링크 포함)은 AI가 아니라 build_final_markdown()이
+    # recommended_cities의 실제 데이터로 직접 조립한다. AI 자유 텍스트에 링크를 맡기면
+    # 가끔 누락되기 때문이다(A1-2 CLI 버전과 달리 여기서는 구조화 JSON만 AI에게 요청한다).
+    # 이 덕분에 AI가 만들 응답 분량도 줄어 Codyssey 프록시 응답 시간도 짧아진다.
     return (
         f"아래 정보를 바탕으로 {travel_date} 국내 여행 추천 리포트를 작성해줘.\n"
         f"추천 지역은 총 {len(recommended_cities)}곳이며, 지역마다 요약과 1일 일정을 만들어야 해.\n\n"
@@ -390,11 +394,65 @@ def build_report_prompt(travel_date, recommended_cities, errors):
         "  - summary: 그 지역 추천 이유와 맛집을 반영한 2~3문장 요약\n"
         "  - schedule.morning/afternoon/evening: 각 1~2문장의 간단한 일정 제안. "
         f"맛집 데이터가 없으면 일정에서 식사 추천은 생략하고 \"{NO_DATA_TEXT}\"라는 표현을 자연스럽게 포함해\n"
-        "- markdown: 위 cities 내용을 사람이 읽기 좋은 Markdown 리포트 전체로 작성 "
-        f"(# {travel_date} 국내 여행 추천 리포트 로 시작, 지역마다 ### 소제목, "
-        "마지막에 '## 오류 요약' 섹션으로 errors를 요약. errors가 비어 있으면 '오류 없음'이라고 표기)\n"
         "모든 텍스트는 한글로만 작성해 (한자, 일본어 등 다른 문자를 섞지 마)."
     )
+
+
+def build_final_markdown(travel_date, recommended_cities, report_cities, errors):
+    """다운로드용 Markdown 리포트를 직접 조립한다 (AI가 아니라 우리 데이터 기준).
+
+    맛집은 recommended_cities[].restaurants(카카오 검색 결과, url 포함)를 그대로
+    Markdown 링크로 만들어 넣는다. AI가 생성한 자유 텍스트에 의존하면 링크가
+    누락될 수 있어(A1-2 CLI 리포트와 달리) 여기서는 항상 정확한 링크를 보장한다.
+    """
+    report_by_city = {c["city"]: c for c in report_cities}
+    lines = [f"# {travel_date} 국내 여행 추천 리포트", "", "## 지역별 추천", ""]
+
+    for city_info in recommended_cities:
+        city = city_info["city"]
+        report = report_by_city.get(city, {})
+
+        lines.append(f"### {city}")
+        lines.append(f"- 날씨: {city_info.get('weather', '')}")
+
+        events = city_info.get("events") or []
+        lines.append(f"- 행사/축제: {', '.join(events) if events else '정보 없음'}")
+
+        summary = report.get("summary") or city_info.get("reason", "")
+        lines.append(f"- 추천 이유: {summary}")
+
+        lines.append("- 맛집 추천:")
+        restaurants = city_info.get("restaurants") or []
+        if restaurants:
+            for r in restaurants:
+                name = r.get("name") or "이름 없음"
+                address = r.get("address") or ""
+                url = r.get("url")
+                if url:
+                    lines.append(f"  - [{name}]({url}) - {address}")
+                else:
+                    lines.append(f"  - {name} - {address}")
+        else:
+            lines.append(f"  - {NO_DATA_TEXT}")
+
+        schedule = report.get("schedule") or {}
+        lines.append("- 1일 일정")
+        lines.append(f"  - 오전: {schedule.get('morning', '')}")
+        lines.append(f"  - 오후: {schedule.get('afternoon', '')}")
+        lines.append(f"  - 저녁: {schedule.get('evening', '')}")
+        lines.append("")
+
+    lines.append("## 오류 요약")
+    if errors:
+        for err in errors:
+            step = err.get("step", "")
+            err_type = err.get("type", "")
+            message = err.get("message", "")
+            lines.append(f"- [{step}/{err_type}] {message}")
+    else:
+        lines.append("오류 없음")
+
+    return "\n".join(lines)
 
 
 def validate_report_response(data, expected_city_count):
@@ -417,9 +475,7 @@ def validate_report_response(data, expected_city_count):
         for key in ("morning", "afternoon", "evening"):
             if not isinstance(schedule.get(key), str):
                 raise ValueError(f"schedule.{key}는 string이어야 함")
-
-    if not isinstance(data.get("markdown"), str):
-        raise ValueError("markdown은 string이어야 함")
+    # markdown은 더 이상 AI에게 요청하지 않는다 (build_final_markdown()이 직접 조립).
 
 
 def generate_report(cody_key, openai_key, travel_date, recommended_cities, errors):
@@ -441,6 +497,7 @@ def generate_report(cody_key, openai_key, travel_date, recommended_cities, error
             )
             data = json.loads(content)
             validate_report_response(data, expected_count)
+            data["markdown"] = build_final_markdown(travel_date, recommended_cities, data["cities"], errors)
             return data, key_source
         except (json.JSONDecodeError, ValueError) as e:
             preview = content[:RAW_RESPONSE_PREVIEW_LEN] if content else None
@@ -454,7 +511,7 @@ def generate_report(cody_key, openai_key, travel_date, recommended_cities, error
                         "content": (
                             f"방금 응답이 스키마를 어겼어({e}). "
                             f"cities는 정확히 {expected_count}개여야 하고, 각 항목은 city/summary/schedule"
-                            "(morning/afternoon/evening)를 모두 가져야 해. markdown도 포함해서 "
+                            "(morning/afternoon/evening)를 모두 가져야 해. "
                             "같은 JSON 스키마로 다시 전체를 출력해."
                         ),
                     },
