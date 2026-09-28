@@ -18,10 +18,19 @@ app/index/server/main/wsgi/asgi 라는 이름의 파일에서만 자동으로 �
 이 파일은 HTTP 요청을 읽고 응답을 쓰는 얇은 어댑터 역할만 한다.
 """
 
+import os
+import sys
 from http.server import BaseHTTPRequestHandler
 
-from _core import ValidationError, handle_recommend, handle_report
-from _http import handle_errors, read_json_body, send_json
+# Vercel Python 런타임은 이 파일을 importlib의 spec loader로 개별 로드하며,
+# 이 파일이 있는 디렉터리(api/)를 자동으로 sys.path에 넣어주지 않는다.
+# 그래서 "from _core import ..."(형제 파일 임포트)가 ModuleNotFoundError로
+# 실패한다. 임포트 전에 이 파일 자신의 디렉터리를 sys.path에 직접 추가해
+# 형제 모듈(_core.py, _http.py)을 항상 찾을 수 있게 한다.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from _core import ValidationError, handle_recommend, handle_report  # noqa: E402
+from _http import handle_errors, read_json_body, send_json  # noqa: E402
 
 MAX_BODY_BYTES = 32 * 1024  # 지역별 맛집 목록까지 포함될 수 있어 32KB로 제한
 
