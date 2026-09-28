@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI여행추천 | AI TripPick</title>
+  <meta name="description" content="여행 날짜만 입력하면 AI가 국내 여행지, 맛집, 1일 일정을 추천해 주는 서비스입니다." />
+  <link rel="icon" href="images/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-wrap">
+      <a class="brand" href="#home">
+        <span class="brand-mark" aria-hidden="true">✈️</span>
+        <span class="brand-text">AI여행추천<span class="brand-en">AI TripPick</span></span>
+      </a>
+
+      <button
+        type="button"
+        class="nav-toggle"
+        id="navToggle"
+        aria-label="메뉴 열기"
+        aria-expanded="false"
+        aria-controls="navMenu"
+      >
+        <span></span><span></span><span></span>
+      </button>
+
+      <nav class="nav-menu" id="navMenu">
+        <a href="#home" class="nav-link">홈</a>
+        <a href="#how" class="nav-link">이용 방법</a>
+        <a href="#planner" class="nav-link">AI 플래너</a>
+        <a href="#faq" class="nav-link">FAQ</a>
+        <button type="button" class="theme-toggle" id="themeToggle" aria-label="다크 모드 전환">
+          <span id="themeIcon" aria-hidden="true">🌙</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- 홈(Hero) -->
+    <section id="home" class="hero">
+      <div class="hero-inner">
+        <p class="eyebrow">국내 여행 추천 AI 서비스</p>
+        <h1>여행 날짜 하나로,<br />어디로 갈지 AI가 정해드려요</h1>
+        <p class="hero-desc">
+          여행 갈 날짜만 입력하면 AI가 그 시기에 어울리는 국내 여행지 2~3곳과
+          실제 맛집, 1일 일정을 한 번에 추천합니다.
+        </p>
+        <a href="#planner" class="btn btn-primary btn-lg">여행지 추천받기</a>
+      </div>
+    </section>
+
+    <!-- 이용 방법 -->
+    <section id="how" class="how">
+      <h2>이용 방법</h2>
+      <ol class="steps">
+        <li>
+          <span class="step-num">1</span>
+          <h3>날짜 입력</h3>
+          <p>여행 갈 날짜와(선택) 원하는 여행 스타일을 입력해요.</p>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <h3>AI 추천</h3>
+          <p>AI가 그 시기에 어울리는 국내 여행지 2~3곳과 지역별 맛집을 찾아줘요.</p>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <h3>일정 확인</h3>
+          <p>지역별 1일 일정 제안과 리포트를 확인하고 다운로드할 수 있어요.</p>
+        </li>
+      </ol>
+    </section>
+
+    <!-- AI 플래너 -->
+    <section id="planner" class="planner">
+      <h2>AI 플래너</h2>
+
+      <form id="plannerForm" class="planner-form" novalidate>
+        <div class="field">
+          <label for="dateInput">여행 날짜 <span class="required">*</span></label>
+          <input type="date" id="dateInput" name="date" autocomplete="off" />
+          <p class="field-error" id="dateError" role="alert"></p>
+        </div>
+
+        <div class="field">
+          <label for="preferenceInput">여행 취향 <span class="optional">(선택)</span></label>
+          <textarea
+            id="preferenceInput"
+            name="preference"
+            maxlength="200"
+            rows="2"
+            placeholder="예: 부모님과, 걷기 적은 일정으로"
+          ></textarea>
+          <p class="field-hint"><span id="prefCount">0</span>/200자</p>
+          <p class="field-error" id="preferenceError" role="alert"></p>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="submitBtn">여행지 추천받기</button>
+          <button type="button" class="btn btn-ghost" id="freshBtn" hidden>새로 추천받기</button>
+        </div>
+      </form>
+
+      <div id="recentWrap" class="recent-wrap" hidden>
+        <p class="recent-title">최근 추천 기록</p>
+        <div id="recentList" class="recent-list"></div>
+      </div>
+
+      <div id="statusArea" class="status-area" aria-live="polite"></div>
+
+      <div id="skeletonArea" class="skeleton-area" hidden aria-hidden="true">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+
+      <div id="resultArea" class="result-area" hidden>
+        <div class="result-header">
+          <h3 id="resultDateLabel"></h3>
+          <button type="button" class="btn btn-ghost btn-sm" id="downloadBtn">리포트 다운로드(.md)</button>
+        </div>
+        <div id="cityCards" class="city-cards"></div>
+        <div id="errorSummary" class="error-summary" hidden></div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="faq">
+      <h2>FAQ</h2>
+
+      <details>
+        <summary>추천 데이터는 어디서 가져오나요?</summary>
+        <p>
+          여행지 추천과 일정은 AI(OpenAI)가 생성하고, 맛집 정보는 카카오 로컬(Kakao Local)
+          검색 결과를 사용합니다.
+        </p>
+      </details>
+
+      <details>
+        <summary>추천 결과가 실제와 다를 수 있나요?</summary>
+        <p>
+          네. AI가 생성한 날씨·행사 정보는 일반적인 경향을 바탕으로 한 참고용이며,
+          실제 예보나 행사 일정은 여행 전 별도로 확인하는 것이 좋습니다.
+        </p>
+      </details>
+
+      <details>
+        <summary>같은 날짜로 다시 검색하면 어떻게 되나요?</summary>
+        <p>
+          브라우저에 저장된 이전 추천 결과를 재사용해 더 빠르게 결과를 보여드려요.
+          다른 추천을 받고 싶다면 "새로 추천받기" 버튼을 눌러주세요.
+        </p>
+      </details>
+
+      <details>
+        <summary>맛집 정보가 없다고 나와요.</summary>
+        <p>
+          카카오 로컬 검색 결과가 없거나 일시적인 오류가 발생한 경우 해당 지역만
+          "데이터 없음"으로 표시되며, 다른 지역과 리포트는 정상적으로 생성됩니다.
+        </p>
+      </details>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>AI여행추천 (AI TripPick) — AI 코딩 도구로 제작한 학습용 프로젝트입니다.</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

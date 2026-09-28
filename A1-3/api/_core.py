@@ -2,7 +2,7 @@
 
 A1-2(`travel_planner.py`)의 CLI 파이프라인(1차 추천 -> 맛집 검색 -> 리포트 생성)을
 웹 서비스용으로 이식한 모듈이다. 파일명이 "_"로 시작하므로 Vercel이 별도의
-API 엔드포인트로 노출하지 않고, recommend.py / report.py가 이 모듈을 가져다 쓴다.
+API 엔드포인트로 노출하지 않고, api/index.py가 이 모듈을 가져다 쓴다.
 
 - 모든 텍스트 응답은 한글로만 작성하도록 프롬프트에서 강제한다 (A1-2와 동일 정책).
 - 클라이언트(브라우저)가 보낸 값은 그대로 신뢰하지 않고 서버에서 다시 검증한다.
@@ -373,3 +373,48 @@ def generate_report(client, travel_date, recommended_cities, errors):
         raise
     except Exception as e:
         raise UpstreamError(f"OpenAI 호출 실패: {e}") from e
+
+
+# ---------------------------------------------------------------------------
+# 요청 payload(dict) -> 응답 payload(dict) 핸들러
+#
+# HTTP 전송 방식(BaseHTTPRequestHandler, WSGI 등)과 완전히 분리해 두면
+# Vercel Python 런타임이 진입점(entrypoint)을 하나만 요구하더라도(api/index.py)
+# 라우팅 방식만 바꿔서 재사용할 수 있다. api/index.py, scripts/dev_server.py가
+# 이 두 함수를 호출한다.
+# ---------------------------------------------------------------------------
+
+def handle_recommend(payload):
+    """POST /api (action="recommend") 처리. A1-2의 1차 추천 + 맛집 검색에 대응."""
+    if not isinstance(payload, dict):
+        raise ValidationError("요청 형식이 올바르지 않습니다.")
+
+    travel_date = validate_date_str(payload.get("date"))
+    preference = validate_preference(payload.get("preference"))
+
+    openai_key, kakao_key = load_api_keys()
+    client = get_openai_client(openai_key)
+
+    errors = []
+    date_str = travel_date.isoformat()
+
+    recommendation = request_recommendation(client, date_str, preference, errors)
+    if recommendation is None:
+        raise UpstreamError("1차 추천 생성에 실패했습니다.")
+
+    recommendation = attach_restaurants(kakao_key, recommendation, errors)
+
+    return {
+        "recommended_cities": recommendation["recommended_cities"],
+        "errors": errors,
+    }
+
+
+def handle_report(payload):
+    """POST /api (action="report") 처리. A1-2의 리포트 생성에 대응."""
+    travel_date, recommended_cities, errors = validate_report_request(payload)
+
+    openai_key, _ = load_api_keys()
+    client = get_openai_client(openai_key)
+
+    return generate_report(client, travel_date.isoformat(), recommended_cities, errors)

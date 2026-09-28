@@ -1,6 +1,5 @@
 {
   "functions": {
-    "api/recommend.py": { "maxDuration": 30 },
-    "api/report.py": { "maxDuration": 30 }
+    "api/index.py": { "maxDuration": 30 }
   }
 }
