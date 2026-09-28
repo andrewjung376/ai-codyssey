@@ -31,7 +31,9 @@ OPENAI_FALLBACK_MODEL = "gpt-4o-mini"
 # Vercel 함수 maxDuration(30초) 안에 "Cody 시도 + (실패 시) OpenAI 폴백"이 모두 끝나야 하므로
 # Cody 쪽 타임아웃을 짧게 잡아, 느릴 때 폴백에 쓸 시간을 남겨둔다.
 CODY_TIMEOUT_SECONDS = 28  # 실측 응답 시간(약 26초)보다 약간 여유를 둔 값
-OPENAI_TIMEOUT_SECONDS = 20
+# 최악의 경우(Cody 타임아웃 28초 + 재시도 시 OpenAI 2회)도 Vercel maxDuration(60초)
+# 안에 들어오도록 15초로 잡는다: 28 + 15 + 15 = 58초.
+OPENAI_TIMEOUT_SECONDS = 15
 
 KEY_SOURCE_CODY = "cody"
 KEY_SOURCE_OPENAI = "openai"
@@ -150,14 +152,20 @@ def call_openai_sdk(api_key, messages, json_mode=False):
     return response.choices[0].message.content
 
 
-def call_llm(cody_key, openai_key, messages, json_mode=False):
+def call_llm(cody_key, openai_key, messages, json_mode=False, try_cody=True):
     """1순위 Codyssey 프록시(CODY_OPENAI_API_KEY) -> 실패 시 2순위 OpenAI SDK(OPENAI_API_KEY).
 
     성공하면 (응답 content, 사용된 키 소스: KEY_SOURCE_CODY|KEY_SOURCE_OPENAI)를 반환한다.
     둘 다 실패하면 마지막 예외를 그대로 올린다.
+
+    try_cody=False면 Cody 시도를 건너뛰고 바로 OpenAI로 간다. Cody는 느릴 때
+    CODY_TIMEOUT_SECONDS(28초)까지 걸릴 수 있어서, 같은 요청 안에서 재시도할 때
+    Cody를 또 시도하면 Vercel 함수 제한(60초)을 넘길 위험이 크다. 그래서
+    request_recommendation()/generate_report()의 재시도(2번째 시도)에서는
+    try_cody=False로 호출해 시간 예산을 지킨다.
     """
     cody_error = None
-    if cody_key:
+    if cody_key and try_cody:
         try:
             content = call_cody_proxy(cody_key, messages, json_mode=json_mode)
             return content, KEY_SOURCE_CODY
@@ -240,7 +248,9 @@ def request_recommendation(cody_key, openai_key, travel_date, preference, errors
     for attempt in range(2):
         content = None
         try:
-            content, key_source = call_llm(cody_key, openai_key, messages, json_mode=True)
+            content, key_source = call_llm(
+                cody_key, openai_key, messages, json_mode=True, try_cody=(attempt == 0)
+            )
             data = json.loads(content)
             validate_recommendation(data)
             return data, key_source
@@ -426,7 +436,9 @@ def generate_report(cody_key, openai_key, travel_date, recommended_cities, error
     for attempt in range(2):
         content = None
         try:
-            content, key_source = call_llm(cody_key, openai_key, messages, json_mode=True)
+            content, key_source = call_llm(
+                cody_key, openai_key, messages, json_mode=True, try_cody=(attempt == 0)
+            )
             data = json.loads(content)
             validate_report_response(data, expected_count)
             return data, key_source
