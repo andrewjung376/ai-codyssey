@@ -5,8 +5,50 @@
 > 이 문서는 [prd.md](prd.md)를 충족하는 **제출물**(프로그램·GitHub 저장소·README·스크린샷)과 **Git 전략**(13개 커밋, 브랜치 생성·병합, 8개 명령어 사용)을 터미널 명령으로 순서대로 실행할 수 있게 정리한 가이드다.
 >
 > - 결과물은 `ai-codyssey` 저장소 **밖**의 새 폴더 `C:\dev\git\andrewjung376\prompt-manager`에 만든다. (저장소 중첩 방지)
-> - 명령은 **Git Bash** 기준이다. VSCode 통합 터미널을 Git Bash로 열면 된다. PowerShell 차이는 각 절에 표시했다.
+> - 명령은 **Bash**(Git Bash)와 **Windows 11 cmd(명령 프롬프트)** 를 모두 제공한다. 둘 중 **하나만 골라** 처음부터 끝까지 사용한다.
+> - `git`, `python`, `gh`, `code` 명령은 두 셸에서 동일하므로 **공통** 블록으로 한 번만 적었다.
 > - 코드 삽입은 VSCode에서 붙여넣는다. 붙여넣은 뒤에는 반드시 **실행 확인 → 커밋** 순서를 지킨다.
+
+## 0. 셸 선택과 공통 준비
+
+### 블록 표기 규칙
+
+| 표기 | 의미 |
+|---|---|
+| **Bash** | Git Bash에서 실행 (VSCode 터미널 프로필을 *Git Bash* 로 선택) |
+| **cmd** | Windows 11 명령 프롬프트에서 실행 (시작 메뉴에서 `cmd` 검색, 또는 VSCode 터미널 프로필 *Command Prompt*) |
+| **공통** | Bash와 cmd에서 똑같이 실행 |
+
+### cmd 사용자는 새 창을 열 때마다 먼저 실행
+
+한글 입력·출력이 깨지지 않게 코드 페이지와 Python 인코딩을 맞춘다.
+
+```bat
+chcp 65001
+set PYTHONUTF8=1
+```
+
+Bash 사용자는 이모지·한글이 깨질 때만 `export PYTHONUTF8=1` 을 실행한다.
+
+### 명령 대조표
+
+| 하는 일 | Bash | cmd |
+|---|---|---|
+| 폴더 이동 | `cd /c/dev/git/andrewjung376` | `cd /d C:\dev\git\andrewjung376` |
+| 폴더 만들기 | `mkdir -p a/b` | `mkdir a\b` |
+| 파일 목록 | `ls -la` | `dir /a` |
+| 폴더 삭제 | `rm -rf 폴더` | `rmdir /s /q 폴더` |
+| 빈 파일 만들기 | `touch 파일` | `type nul > 파일` |
+| 파일 내용 보기 | `cat 파일`, `tail -3 파일` | `type 파일` |
+| 환경 변수 | `export PYTHONUTF8=1` | `set PYTHONUTF8=1` |
+| 입력 자동 전달 | `printf '1\n2\n' \| python x.py` | `(echo 1& echo 2) \| python x.py` |
+| 텍스트 필터 | `grep -i -E "a\|b"` | `findstr /i "a b"` |
+
+### cmd 입력 자동 전달 주의사항
+
+- `echo 값& echo 값` 처럼 **`&` 앞에 공백을 넣지 않는다.** (공백이 입력값에 포함된다)
+- **빈 입력은 `echo.`** 로 만든다. `echo` 뒤에 공백만 두면 `ECHO is on.` 이 출력되어 입력값이 된다.
+- 한글이 포함된 입력은 위의 `chcp 65001`, `set PYTHONUTF8=1` 을 먼저 실행한 뒤에만 정상 동작한다.
 
 ## 진행 요약
 
@@ -25,6 +67,8 @@
 
 ## 1. 개발 환경 확인 (prd §8)
 
+**공통**
+
 ```bash
 python --version
 git --version
@@ -35,13 +79,29 @@ git config --global core.autocrlf true
 git config --global --list
 code --install-extension ms-python.python
 code --install-extension MS-CEINTL.vscode-language-pack-ko
-code --list-extensions | grep -i -E "python|language-pack-ko"
 ```
 
 - `MS-CEINTL...ko`(한국어 팩)는 선택 사항이다.
 - `core.autocrlf true`는 Windows에서 나오는 `LF will be replaced by CRLF` 경고를 줄여 준다.
+- `code` 명령이 없다고 나오면 VSCode를 재설치할 때 *PATH에 추가* 를 선택하거나, VSCode 명령 팔레트(`Ctrl+Shift+P`)의 *Shell Command: Install 'code' command in PATH* 를 실행한다.
+
+설치된 확장 확인:
+
+**Bash**
+
+```bash
+code --list-extensions | grep -i -E "python|language-pack-ko"
+```
+
+**cmd**
+
+```bat
+code --list-extensions | findstr /i "python language-pack-ko"
+```
 
 `Hello` 실행 확인 (별도 임시 폴더에서 수행하고 프로젝트 폴더에는 만들지 않는다):
+
+**Bash**
 
 ```bash
 mkdir -p ~/hello-test && cd ~/hello-test
@@ -50,7 +110,20 @@ python hello.py
 cd ~ && rm -rf ~/hello-test
 ```
 
-VSCode GitHub 로그인: 좌측 하단 **계정(Accounts)** 아이콘 → GitHub 로그인 항목을 선택해 브라우저에서 인증한다. 로그인 후 계정 메뉴에 `andrewjung376` 이 표시되면 연동이 정상이다. (터미널 대안: `gh auth login` → `gh auth status`)
+**cmd**
+
+```bat
+mkdir %USERPROFILE%\hello-test
+cd /d %USERPROFILE%\hello-test
+echo print("Hello")> hello.py
+python hello.py
+cd /d %USERPROFILE%
+rmdir /s /q hello-test
+```
+
+> cmd에서 `echo print("Hello")> hello.py` 는 `>` 앞에 공백이 없어야 파일 끝에 공백이 붙지 않는다.
+
+VSCode GitHub 로그인: 좌측 하단 **계정(Accounts)** 아이콘 → GitHub 로그인 항목을 선택해 브라우저에서 인증한다. 로그인 후 계정 메뉴에 `andrewjung376` 이 표시되면 연동이 정상이다. (터미널 대안, **공통**: `gh auth login` → `gh auth status`)
 
 **스크린샷 ①(개발 환경):** VSCode 창에 Python 확장 설치 화면 + 터미널의 `python --version`, `git --version`, `git config --global --list` 출력이 함께 보이게 캡처한다.
 
@@ -67,6 +140,8 @@ VSCode GitHub 로그인: 좌측 하단 **계정(Accounts)** 아이콘 → GitHub
 
 ### 방법 B: GitHub CLI
 
+**공통**
+
 ```bash
 gh auth login
 gh repo create prompt-manager --public
@@ -78,10 +153,29 @@ gh repo create prompt-manager --public
 
 ## 3. 로컬 저장소 초기화와 첫 커밋 — `init`, `add`, `commit`, `push` (커밋 #1)
 
+프로젝트 폴더 만들기:
+
+**Bash**
+
 ```bash
 cd /c/dev/git/andrewjung376
 mkdir prompt-manager
 cd prompt-manager
+```
+
+**cmd**
+
+```bat
+cd /d C:\dev\git\andrewjung376
+mkdir prompt-manager
+cd prompt-manager
+```
+
+저장소 초기화:
+
+**공통**
+
+```bash
 git init
 git branch --show-current
 ```
@@ -89,6 +183,8 @@ git branch --show-current
 `main` 이 출력되어야 한다. (`master` 라면 `git branch -M main`)
 
 `.gitignore` 와 `README.md` 생성:
+
+**Bash**
 
 ```bash
 cat > .gitignore <<'EOF'
@@ -104,7 +200,18 @@ cat > README.md <<'EOF'
 EOF
 ```
 
+**cmd** (먼저 `chcp 65001` 을 실행했는지 확인한다. 그렇지 않으면 README의 한글이 UTF-8로 저장되지 않는다)
+
+```bat
+(echo __pycache__/& echo *.pyc& echo .venv/& echo .vscode/& echo *.json) > .gitignore
+echo # 나만의 프롬프트 관리 프로그램> README.md
+type .gitignore
+type README.md
+```
+
 원격 연결 후 첫 push:
+
+**공통**
 
 ```bash
 git add .gitignore README.md
@@ -120,6 +227,8 @@ git push -u origin main
 
 프로젝트 폴더 **밖**에서 실행한다.
 
+**Bash**
+
 ```bash
 cd /c/dev/git/andrewjung376
 git clone https://github.com/octocat/Spoon-Knife.git
@@ -131,7 +240,18 @@ rm -rf Spoon-Knife
 cd prompt-manager
 ```
 
-> PowerShell에서 삭제할 때는 `Remove-Item -Recurse -Force Spoon-Knife`
+**cmd**
+
+```bat
+cd /d C:\dev\git\andrewjung376
+git clone https://github.com/octocat/Spoon-Knife.git
+cd Spoon-Knife
+dir /a
+git log --oneline -5
+cd ..
+rmdir /s /q Spoon-Knife
+cd prompt-manager
+```
 
 ---
 
@@ -143,11 +263,29 @@ cd prompt-manager
 
 1. 코드 작성 → 2. `python prompt_manager.py` 로 실행 확인 → 3. `git add` / `git commit` / `git push`
 4. 함수는 **`def main():` 바로 위**에 붙여넣는다. (Python은 함수 호출 시점에 이름을 찾으므로 정의 순서는 `main()` 실행 전이면 된다)
+5. 파일 저장은 `Ctrl+S`. 인코딩은 VSCode 기본값(UTF-8)을 유지한다.
 
 ### 커밋 #2 — 메뉴 출력, 메인 루프, 종료
 
+빈 파일을 만들고 VSCode로 연다.
+
+**Bash**
+
 ```bash
-cat > prompt_manager.py <<'EOF'
+touch prompt_manager.py
+code prompt_manager.py
+```
+
+**cmd**
+
+```bat
+type nul > prompt_manager.py
+code prompt_manager.py
+```
+
+아래 코드를 붙여넣고 저장한다.
+
+```python
 """나만의 프롬프트 관리 프로그램 (콘솔 기반)"""
 
 
@@ -177,9 +315,27 @@ def main():
 
 if __name__ == "__main__":
     main()
-EOF
+```
 
+실행 확인:
+
+**Bash**
+
+```bash
 printf '0\n' | python prompt_manager.py
+```
+
+**cmd**
+
+```bat
+(echo 0) | python prompt_manager.py
+```
+
+커밋:
+
+**공통**
+
+```bash
 git add prompt_manager.py
 git commit -m "feat: 메뉴 출력 및 메인 루프, 종료 기능"
 git push
@@ -197,14 +353,31 @@ git push
                 print("올바른 번호를 입력하세요.")
 ```
 
+실행 확인:
+
+**Bash**
+
 ```bash
 printf '9\nabc\n\n0\n' | python prompt_manager.py
+```
+
+**cmd**
+
+```bat
+(echo 9& echo abc& echo.& echo 0) | python prompt_manager.py
+```
+
+`올바른 번호를 입력하세요.` 가 3번 출력되고 종료되면 정상이다.
+
+커밋:
+
+**공통**
+
+```bash
 git add prompt_manager.py
 git commit -m "feat: 잘못된 메뉴 입력 처리"
 git push
 ```
-
-`올바른 번호를 입력하세요.` 가 3번 출력되고 종료되면 정상이다.
 
 ### 커밋 #4 — 이전 미션 프롬프트 기본 데이터 등록 (F1)
 
@@ -251,6 +424,10 @@ DEFAULT_PROMPTS = [
 categories = list(CATEGORIES)
 prompts = [dict(p) for p in DEFAULT_PROMPTS]
 ```
+
+실행 확인과 커밋:
+
+**공통**
 
 ```bash
 python -c "import prompt_manager as m; print(len(m.prompts), '개 등록')"
@@ -301,14 +478,31 @@ def select_category(allow_custom=False):
 - `input_number(..., retry=False)`: 잘못된 값이면 `None` 반환 (상세 보기·즐겨찾기용, prd F6/F7)
 - `input_number(..., retry=True)`: 올바른 값이 나올 때까지 재입력 (카테고리 선택용, prd F2/F4)
 
+실행 확인:
+
+**Bash**
+
 ```bash
 printf '\n  \n값\n' | python -c "import prompt_manager as m; print(repr(m.input_non_empty('입력: ')))"
+```
+
+**cmd**
+
+```bat
+(echo.& echo.& echo 값) | python -c "import prompt_manager as m; print(repr(m.input_non_empty('입력: ')))"
+```
+
+빈 입력 2번에 재입력 안내가 나오고 `'값'` 이 출력되면 정상이다.
+
+커밋:
+
+**공통**
+
+```bash
 git add prompt_manager.py
 git commit -m "feat: 입력 검증 헬퍼 함수 추가"
 git push
 ```
-
-빈 입력 2번에 재입력 안내가 나오고 `'값'` 이 출력되면 정상이다.
 
 ### 커밋 #6 — 프롬프트 추가 (F2)
 
@@ -332,18 +526,37 @@ def add_prompt():
                 add_prompt()
 ```
 
+실행 확인:
+
+**Bash**
+
 ```bash
 printf '1\n   \n테스트 제목\n테스트 내용\n1\n0\n' | python prompt_manager.py
+```
+
+**cmd** (공백만 입력한 경우는 빈 입력과 같은 방식으로 처리되므로 `echo.` 로 대신한다)
+
+```bat
+(echo 1& echo.& echo 테스트 제목& echo 테스트 내용& echo 1& echo 0) | python prompt_manager.py
+```
+
+공백 제목에 재입력 안내가 나온 뒤 `프롬프트가 추가되었습니다!` 가 출력되면 정상이다. (T3)
+
+커밋:
+
+**공통**
+
+```bash
 git add prompt_manager.py
 git commit -m "feat: 프롬프트 추가 기능"
 git push
 ```
 
-공백 제목에 재입력 안내가 나온 뒤 `프롬프트가 추가되었습니다!` 가 출력되면 정상이다. (T3)
-
 ### 커밋 #7 — 프롬프트 목록 (F3) : **브랜치에서 작업** (`checkout`)
 
 먼저 `main` 을 push한 상태인지 확인한 뒤 브랜치를 만든다.
+
+**공통**
 
 ```bash
 git status
@@ -380,14 +593,33 @@ def show_list():
 
 `items` 는 `(전체 번호, 프롬프트)` 튜플의 리스트다. 이후 조회·검색·즐겨찾기 목록에서도 이 함수를 재사용한다.
 
+실행 확인:
+
+**Bash**
+
 ```bash
 printf '2\n0\n' | python prompt_manager.py
+```
+
+**cmd**
+
+```bat
+(echo 2& echo 0) | python prompt_manager.py
+```
+
+커밋과 브랜치 push:
+
+**공통**
+
+```bash
 git add prompt_manager.py
 git commit -m "feat: 프롬프트 목록 기능"
 git push -u origin feature/prompt-list
 ```
 
 ### 커밋 #8 — `main` 으로 병합 (`checkout`, `merge`)
+
+**공통**
 
 ```bash
 git checkout main
@@ -399,6 +631,8 @@ git log --oneline --graph -5
 - `--no-ff` 를 쓰면 fast-forward 대신 **병합 커밋**이 만들어져 `git log --graph` 에 갈래(`|\`, `|/`)가 남는다.
 - 충돌이 나면 `git status` 로 `both modified` 파일을 확인하고, `<<<<<<<` / `=======` / `>>>>>>>` 구간을 VSCode에서 정리한 뒤 `git add prompt_manager.py` → `git commit` 한다.
 - 병합 후 브랜치 정리(선택):
+
+**공통**
 
 ```bash
 git branch -d feature/prompt-list
@@ -427,14 +661,31 @@ def show_by_category():
                 show_by_category()
 ```
 
+실행 확인:
+
+**Bash**
+
 ```bash
 printf '3\n9\n1\n0\n' | python prompt_manager.py
+```
+
+**cmd**
+
+```bat
+(echo 3& echo 9& echo 1& echo 0) | python prompt_manager.py
+```
+
+잘못된 번호(9)에 재입력 안내가 나온 뒤 `[텍스트 생성]` 목록이 출력되어야 한다. 표시 번호는 **전체 목록 기준 번호**다.
+
+커밋:
+
+**공통**
+
+```bash
 git add prompt_manager.py
 git commit -m "feat: 카테고리별 조회 기능"
 git push
 ```
-
-잘못된 번호(9)에 재입력 안내가 나온 뒤 `[텍스트 생성]` 목록이 출력되어야 한다. 표시 번호는 **전체 목록 기준 번호**다.
 
 ### 커밋 #10 — 프롬프트 검색 (F5)
 
@@ -460,8 +711,25 @@ def search_prompt():
                 search_prompt()
 ```
 
+실행 확인:
+
+**Bash**
+
 ```bash
 printf '4\n블로그\n4\n없는단어\n0\n' | python prompt_manager.py
+```
+
+**cmd**
+
+```bat
+(echo 4& echo 블로그& echo 4& echo 없는단어& echo 0) | python prompt_manager.py
+```
+
+커밋:
+
+**공통**
+
+```bash
 git add prompt_manager.py
 git commit -m "feat: 프롬프트 검색 기능"
 git push
@@ -494,8 +762,25 @@ def show_detail():
                 show_detail()
 ```
 
+실행 확인:
+
+**Bash**
+
 ```bash
 printf '5\n1\n5\n999\n0\n' | python prompt_manager.py
+```
+
+**cmd**
+
+```bat
+(echo 5& echo 1& echo 5& echo 999& echo 0) | python prompt_manager.py
+```
+
+커밋:
+
+**공통**
+
+```bash
 git add prompt_manager.py
 git commit -m "feat: 프롬프트 상세 보기 기능"
 git push
@@ -535,18 +820,41 @@ def show_favorites():
                 show_favorites()
 ```
 
+실행 확인:
+
+**Bash**
+
 ```bash
 printf '6\n2\n6\n2\n7\n0\n' | python prompt_manager.py
+```
+
+**cmd**
+
+```bat
+(echo 6& echo 2& echo 6& echo 2& echo 7& echo 0) | python prompt_manager.py
+```
+
+같은 번호를 두 번 입력하면 `추가했습니다!` → `해제했습니다!` 순서로 출력되어야 한다. (T8)
+
+커밋:
+
+**공통**
+
+```bash
 git add prompt_manager.py
 git commit -m "feat: 즐겨찾기 추가/해제 및 목록 기능"
 git push
 ```
 
-같은 번호를 두 번 입력하면 `추가했습니다!` → `해제했습니다!` 순서로 출력되어야 한다. (T8)
-
 ### 커밋 #13 — README 작성 (prd §9)
 
-`README.md` 전체를 아래 내용으로 교체한다. (VSCode에서 붙여넣기)
+`README.md` 전체를 아래 내용으로 교체한다. VSCode에서 파일을 연 뒤 전체 선택(`Ctrl+A`) 후 붙여넣는다.
+
+**공통**
+
+```bash
+code README.md
+```
 
 ````markdown
 # 나만의 프롬프트 관리 프로그램
@@ -567,7 +875,12 @@ cd prompt-manager
 python prompt_manager.py
 ```
 
-Windows에서 이모지(⭐)나 한글이 깨지면 `chcp 65001` 실행 후 다시 실행하세요.
+Windows 명령 프롬프트(cmd)에서 이모지(⭐)나 한글이 깨지면 아래를 먼저 실행한 뒤 다시 실행하세요.
+
+```bat
+chcp 65001
+set PYTHONUTF8=1
+```
 
 ## 기능 목록
 
@@ -621,6 +934,8 @@ prompts = [
 ```
 ````
 
+**공통**
+
 ```bash
 git add README.md
 git commit -m "docs: README 기능 목록·실행 방법·카테고리 설명 작성"
@@ -633,6 +948,8 @@ git push
 
 로컬이 깨끗하고 push가 끝난 상태에서 수행한다.
 
+**공통**
+
 ```bash
 git status
 ```
@@ -641,10 +958,25 @@ git status
    (예: `문의: GitHub Issues 를 이용해 주세요.`) → *Commit changes*
 2. 로컬로 반영한다.
 
+**공통**
+
 ```bash
 git pull
 git log --oneline -3
+```
+
+추가한 줄 확인:
+
+**Bash**
+
+```bash
 tail -3 README.md
+```
+
+**cmd**
+
+```bat
+type README.md
 ```
 
 웹에서 만든 커밋이 로그 맨 위에 보이면 성공이다.
@@ -653,29 +985,60 @@ tail -3 README.md
 
 ## 7. 수용 기준 검증 T1~T10 (prd §10)
 
-모두 `prompt-manager` 폴더에서 실행한다. 출력에서 아래 **기대 결과** 를 확인한다.
+모두 `prompt-manager` 폴더에서 실행한다. cmd 사용자는 `chcp 65001`, `set PYTHONUTF8=1` 을 먼저 실행했는지 확인한다.
 
-| # | 명령 | 기대 결과 |
-|---|---|---|
-| T1 | `printf '2\n0\n' \| python prompt_manager.py` | 메뉴 출력, 목록에 `총 5개의 프롬프트` (3개 이상) |
-| T2 | `printf '9\nabc\n\n0\n' \| python prompt_manager.py` | `올바른 번호를 입력하세요.` 3회 후 메뉴 재출력 |
-| T3 | `printf '1\n   \n제목\n내용\n1\n0\n' \| python prompt_manager.py` | `값을 입력해야 합니다.` 후 추가 완료 |
-| T4 | `printf '1\n제목\n내용\n1\n2\n0\n' \| python prompt_manager.py` | 목록 6번에 `[텍스트 생성] 제목` (⭐ 없음) |
-| T5 | `printf '1\n제목\n내용\n7\n코딩\n3\n7\n0\n' \| python prompt_manager.py` | 카테고리 목록에 `7) 코딩`, 조회 결과에 `[코딩] 제목` |
-| T6 | `printf '4\n블로그\n4\n없는단어\n0\n' \| python prompt_manager.py` | 결과 1건 / `검색 결과가 없습니다.` |
-| T7 | `printf '5\n1\n5\n999\n0\n' \| python prompt_manager.py` | 전체 내용 출력 / `1~5 사이의 번호를 입력하세요.` |
-| T8 | `printf '6\n2\n6\n2\n0\n' \| python prompt_manager.py` | `추가했습니다!` → `해제했습니다!` |
-| T9 | `printf '7\n0\n' \| python prompt_manager.py` | ⭐ 항목(블로그 글 작성 도우미)만 출력 |
-| T10 | `printf '0\n' \| python prompt_manager.py` | `프로그램을 종료합니다.` 후 정상 종료 |
+**Bash**
 
-> 이모지·한글이 깨지면 `export PYTHONUTF8=1` 을 먼저 실행한다. (PowerShell: `$env:PYTHONUTF8=1`)
-> Windows PowerShell에서는 `printf` 대신 `"9`nabc`n`n0`n" | python prompt_manager.py` 형식을 쓴다.
+```bash
+printf '2\n0\n' | python prompt_manager.py                                   # T1
+printf '9\nabc\n\n0\n' | python prompt_manager.py                             # T2
+printf '1\n   \n제목\n내용\n1\n0\n' | python prompt_manager.py                # T3
+printf '1\n제목\n내용\n1\n2\n0\n' | python prompt_manager.py                  # T4
+printf '1\n제목\n내용\n7\n코딩\n3\n7\n0\n' | python prompt_manager.py         # T5
+printf '4\n블로그\n4\n없는단어\n0\n' | python prompt_manager.py               # T6
+printf '5\n1\n5\n999\n0\n' | python prompt_manager.py                         # T7
+printf '6\n2\n6\n2\n0\n' | python prompt_manager.py                           # T8
+printf '7\n0\n' | python prompt_manager.py                                    # T9
+printf '0\n' | python prompt_manager.py                                       # T10
+```
+
+**cmd** (T3의 공백만 입력은 빈 입력 `echo.` 로 대신한다)
+
+```bat
+(echo 2& echo 0) | python prompt_manager.py
+(echo 9& echo abc& echo.& echo 0) | python prompt_manager.py
+(echo 1& echo.& echo 제목& echo 내용& echo 1& echo 0) | python prompt_manager.py
+(echo 1& echo 제목& echo 내용& echo 1& echo 2& echo 0) | python prompt_manager.py
+(echo 1& echo 제목& echo 내용& echo 7& echo 코딩& echo 3& echo 7& echo 0) | python prompt_manager.py
+(echo 4& echo 블로그& echo 4& echo 없는단어& echo 0) | python prompt_manager.py
+(echo 5& echo 1& echo 5& echo 999& echo 0) | python prompt_manager.py
+(echo 6& echo 2& echo 6& echo 2& echo 0) | python prompt_manager.py
+(echo 7& echo 0) | python prompt_manager.py
+(echo 0) | python prompt_manager.py
+```
+
+cmd 명령은 위에서부터 T1, T2, … T10 순서다. 출력에서 아래 **기대 결과** 를 확인한다.
+
+| # | 기대 결과 |
+|---|---|
+| T1 | 메뉴 출력, 목록에 `총 5개의 프롬프트` (3개 이상) |
+| T2 | `올바른 번호를 입력하세요.` 3회 후 메뉴 재출력 |
+| T3 | `값을 입력해야 합니다.` 후 추가 완료 |
+| T4 | 목록 6번에 `[텍스트 생성] 제목` (⭐ 없음) |
+| T5 | 카테고리 목록에 `7) 코딩`, 조회 결과에 `[코딩] 제목` |
+| T6 | 결과 1건 / `검색 결과가 없습니다.` |
+| T7 | 전체 내용 출력 / `1~5 사이의 번호를 입력하세요.` |
+| T8 | `추가했습니다!` → `해제했습니다!` |
+| T9 | ⭐ 항목(블로그 글 작성 도우미)만 출력 |
+| T10 | `프로그램을 종료합니다.` 후 정상 종료 |
 
 ---
 
 ## 8. 제출물 준비 (prd §11)
 
 ### 8-1. 최종 상태 확인
+
+**공통**
 
 ```bash
 git status
@@ -725,9 +1088,25 @@ git remote -v
 
 ### 8-3. (선택) 스크린샷을 저장소에 함께 올리기
 
+캡처 이미지를 저장할 폴더를 만든다.
+
+**Bash**
+
 ```bash
 mkdir -p docs/screenshots
-# 캡처 이미지를 docs/screenshots/ 에 저장한 뒤
+```
+
+**cmd**
+
+```bat
+mkdir docs\screenshots
+```
+
+이미지를 `docs/screenshots/` 에 저장한 뒤 커밋한다.
+
+**공통**
+
+```bash
 git add docs/screenshots
 git commit -m "docs: 제출용 스크린샷 추가"
 git push
@@ -756,12 +1135,17 @@ git push
 
 | 증상 | 원인 | 해결 |
 |---|---|---|
-| `fatal: not a git repository` | 프로젝트 폴더 밖에서 실행 | `cd /c/dev/git/andrewjung376/prompt-manager` |
+| `fatal: not a git repository` | 프로젝트 폴더 밖에서 실행 | Bash: `cd /c/dev/git/andrewjung376/prompt-manager` / cmd: `cd /d C:\dev\git\andrewjung376\prompt-manager` |
 | `error: remote origin already exists` | 원격 중복 등록 | `git remote set-url origin <URL>` |
 | `! [rejected] main -> main (fetch first)` | 원격에 로컬에 없는 커밋 존재 | `git pull` 후 다시 `git push` |
 | `Author identity unknown` | 사용자 정보 미설정 | 1장의 `git config` 실행 |
 | push 시 인증 실패 | GitHub 로그인 필요 | VSCode GitHub 로그인 또는 `gh auth login` |
 | 병합 후 그래프에 갈래가 안 보임 | fast-forward 병합 | `--no-ff` 옵션 사용 |
-| `UnicodeEncodeError`, 이모지 깨짐 | 콘솔 인코딩 | `export PYTHONUTF8=1` 또는 `chcp 65001` |
+| `UnicodeEncodeError`, 이모지·한글 깨짐 | 콘솔 인코딩 | Bash: `export PYTHONUTF8=1` / cmd: `chcp 65001` 후 `set PYTHONUTF8=1` |
+| cmd에서 한글 입력이 `?` 나 깨진 글자로 전달됨 | 코드 페이지 불일치 | `chcp 65001` 과 `set PYTHONUTF8=1` 을 **둘 다** 실행 (새 cmd 창마다 필요) |
+| cmd 자동 입력 결과에 `ECHO is on.` 이 나타남 | `echo` 뒤에 공백만 둠 | 빈 입력은 `echo.` 사용 |
+| cmd에서 입력값 끝에 공백이 붙음 | `&` 앞에 공백 | `echo 1& echo 2` 처럼 `&` 앞 공백 제거 |
+| `'code'은(는) 내부 또는 외부 명령...이 아닙니다` | VSCode가 PATH에 없음 | VSCode 명령 팔레트에서 *Shell Command: Install 'code' command in PATH* 실행 후 새 터미널 |
+| `'python'은(는) 내부 또는 외부 명령...이 아닙니다` | Python PATH 미등록 | Python 재설치 시 *Add python.exe to PATH* 선택, 또는 `py prompt_manager.py` 사용 |
 | `NameError: name 'xxx' is not defined` | 함수 붙여넣기 누락 또는 `main()` 분기만 추가 | 해당 단계의 함수를 `def main():` 위에 붙여넣었는지 확인 |
 | 커밋 후 `git push` 시 브랜치 upstream 없음 | 새 브랜치 첫 push | `git push -u origin <브랜치명>` |
