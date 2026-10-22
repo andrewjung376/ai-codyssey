@@ -370,17 +370,17 @@ pip freeze > requirements.txt
 
 ## 10. 마일스톤
 
-| 단계 | 작업 | 산출물 |
-|------|------|--------|
-| M0 | 가상환경 생성, 기본 패키지 설치, `.gitignore`, 폴더 뼈대 | `.venv/`, `requirements.txt`, `.gitignore` |
-| M1 | Takeout 다운로드(개인 계정 + 브랜드 계정별 + Chrome), 데이터 구조와 `channel.csv` 실제 구조, Chrome 기록 기간 확인 | 원본 데이터, README 데이터 섹션 |
-| M2 | 파서·정제·프로필 식별 모듈, 2개 프로필 샘플 데이터 생성 | `src/`, `data/sample/` |
-| M2-1 | Chrome 방문 기록 파서, 정제 규칙, 샘플 데이터에 Chrome 기록 추가, 테스트 | `src/` 갱신, 샘플 zip 갱신, `tests/` |
-| M3 | 탐색 분석과 시각화 | `analysis.ipynb`, `images/` |
-| M4 | 인사이트 도출, 리포트 작성 | `REPORT.md` (AI 사용 로그 포함) |
-| M5 | Streamlit 대시보드 구현 | `app.py` |
-| M6 | STL 분해·예측, 배포 (**보류: 향후 계획**, [future_plan.md](future_plan.md)) | 배포 URL, 스크린샷 |
-| M7 | 최종 점검(링크, 재현성, 개인정보 마스킹) | GitHub 커밋 |
+| 단계 | 작업 | 산출물 | 상태 |
+|------|------|--------|------|
+| M0 | 가상환경 생성, 기본 패키지 설치, `.gitignore`, 폴더 뼈대 | `.venv/`, `requirements.txt`, `.gitignore` | 완료 |
+| M1 | Takeout 다운로드(개인 계정 + 브랜드 계정별 + Chrome), 데이터 구조와 `channel.csv` 실제 구조, Chrome 기록 기간 확인 | 원본 데이터, README 데이터 섹션 | 부분 완료 (Chrome·YouTube 시청만 확보, 검색·브랜드 계정은 미확보) |
+| M2 | 파서·정제·프로필 식별 모듈, 2개 프로필 샘플 데이터 생성 | `src/`, `data/sample/` | 완료 |
+| M2-1 | Chrome 방문 기록 파서, 정제 규칙, 샘플 데이터에 Chrome 기록 추가, 테스트 | `src/` 갱신, 샘플 zip 갱신, `tests/` | 완료 |
+| M3 | 탐색 분석과 시각화 | `analysis.ipynb`, `images/` | 완료 |
+| M4 | 인사이트 도출, 리포트 작성 | `REPORT.md` (AI 사용 로그 포함) | 완료 |
+| M5 | Streamlit 대시보드 구현 | `app.py` | 완료 |
+| M6 | STL 분해·예측, 배포 (**보류: 향후 계획**, [future_plan.md](future_plan.md)) | 배포 URL, 스크린샷 | 보류 |
+| M7 | 최종 점검(링크, 재현성, 개인정보 마스킹) | GitHub 커밋 | 완료 |
 
 ---
 

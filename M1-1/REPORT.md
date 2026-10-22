@@ -243,6 +243,6 @@ python -m pytest                      # 테스트 42개
 jupyter nbconvert --to notebook --execute --inplace analysis.ipynb
 ```
 
-- 본인 데이터로 실행하려면 Takeout JSON을 `data/raw/`에 넣는다. 데이터가 없으면 노트북이 합성 샘플(`data/sample/`)로 실행된다.
+- 본인 데이터로 실행하려면 Takeout JSON을 `data/raw/`에 넣는다. 데이터가 없으면 노트북이 합성 샘플(`data/sample/`)로 실행되며, 이때는 리포트 그림(`images/`)을 덮어쓰지 않는다.
 - 그래프는 `images/`에 저장된다. 공개할 도메인·채널은 실행 후 생기는 `doc/domain_review.md`, `doc/channel_review.md`에서 체크하고 다시 실행한다.
 - 의존성 버전은 [requirements.txt](requirements.txt)에 고정되어 있다 (Python 3.10 이상, 개발 환경 3.13.5).
