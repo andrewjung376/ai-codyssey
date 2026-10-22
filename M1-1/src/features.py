@@ -31,6 +31,17 @@ def daily_counts(events: pd.DataFrame, by: str | None = "service",
     return counts.reindex(index, fill_value=0).astype(int)
 
 
+def daily_by_service(events: pd.DataFrame) -> dict[str, pd.Series]:
+    """서비스마다 그 서비스의 기간 안에서만 만든 일별 건수.
+
+    서비스마다 기간이 다를 수 있어(실제·샘플 혼합, 기록 시작일 차이), 공통 기간으로 맞추면 생기는 가짜 0을 피한다.
+    """
+    return {
+        str(service): daily_counts(group, by=None)["total"].rename(str(service))
+        for service, group in events.groupby("service", observed=True)
+    }
+
+
 def resample(daily: pd.DataFrame | pd.Series, unit: str = "D") -> pd.DataFrame | pd.Series:
     """일별 집계를 일(D)·주(W)·월(M) 단위 합계로 바꾼다."""
     if unit == "D":
@@ -48,8 +59,15 @@ def pct_change(data: pd.DataFrame | pd.Series) -> pd.DataFrame | pd.Series:
 
 
 def flag_outliers(series: pd.Series, k: float = 3.0) -> pd.Series:
-    """Q3 + k×IQR을 넘는 날을 True로 표시한다. 값은 제거하지 않는다."""
-    q1, q3 = series.quantile([0.25, 0.75])
+    """Q3 + k×IQR을 넘는 날을 True로 표시한다. 값은 제거하지 않는다.
+
+    사분위수는 활동이 있는 날(값 > 0)만으로 계산한다. 0이 대부분인 드문 시계열에서는
+    전체로 계산하면 Q3와 IQR이 0이 되어 활동한 날이 모두 이상치가 되기 때문이다.
+    """
+    active = series[series > 0]
+    if active.empty:
+        return pd.Series(False, index=series.index)
+    q1, q3 = active.quantile([0.25, 0.75])
     return series > q3 + k * (q3 - q1)
 
 
