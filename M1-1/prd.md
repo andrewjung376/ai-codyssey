@@ -194,7 +194,7 @@ Google Takeout으로 받은 데이터를 정제하고 시각화하면, 그래프
 | NFR-04 | 성능 | 이벤트 10만 건 기준 파싱·집계 10초 이내(`st.cache_data` 활용) |
 | NFR-05 | 재현성 | 프로젝트 전용 가상환경 `.venv`(Python 3.10+)에서만 패키지를 설치·실행한다. `requirements.txt`에 버전을 고정하고, README에 가상환경 생성·활성화·설치 명령을 bash·cmd·PowerShell 별로 적는다 |
 | NFR-06 | 이식성 | 영어·한국어 Takeout 모두 파싱 |
-| NFR-07 | 환경 격리 | 전역 Python에는 패키지를 설치하지 않는다. `.venv/`는 `.gitignore`에 등록한다. Jupyter는 `.venv` 커널을 등록해 사용한다 |
+| NFR-07 | 환경 격리 | 전역 Python에는 패키지를 설치하지 않는다. `.venv/`는 `.gitignore`에 등록한다. 노트북은 `.venv`의 Python으로만 실행한다(별도 커널 등록 없음) |
 | NFR-08 | 프로필 데이터 분리 | 프로필 삭제 시 해당 데이터를 세션 메모리에서 즉시 제거한다 |
 
 ---
@@ -269,18 +269,18 @@ python -m venv .venv
 
 > PowerShell에서 실행 정책 오류가 나면 해당 세션에서만 `Set-ExecutionPolicy -Scope Process RemoteSigned`로 허용한다.
 
-**3) 패키지 설치 및 Jupyter 커널 등록**
+**3) 패키지 설치**
 ```bash
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-python -m ipykernel install --user --name myactivity-lens --display-name "Python (myactivity-lens)"
 ```
 
 **4) 실행**
 ```bash
 streamlit run app.py
 ```
-> 노트북은 커널을 "Python (myactivity-lens)"로 선택해 실행한다.
+> 노트북 실행: VS Code에서는 커널 선택에서 `.venv` 인터프리터를 고른다. 그 밖에는 `.venv`를 활성화한 상태에서 `jupyter lab`으로 실행한다.
+> 전역 Jupyter로 열면 전역 Python이 쓰여 패키지를 찾지 못하므로 사용하지 않는다. (별도 커널 등록은 하지 않는다)
 
 **5) 의존성 변경 시**
 ```bash
@@ -315,7 +315,7 @@ pip freeze > requirements.txt
 
 | 단계 | 작업 | 산출물 |
 |------|------|--------|
-| M0 | 가상환경 생성, 기본 패키지 설치, `.gitignore`, Jupyter 커널 등록 | `.venv/`, `requirements.txt`, `.gitignore` |
+| M0 | 가상환경 생성, 기본 패키지 설치, `.gitignore`, 폴더 뼈대 | `.venv/`, `requirements.txt`, `.gitignore` |
 | M1 | Takeout 다운로드(개인 계정 + 브랜드 계정별), 데이터 구조와 `channel.csv` 실제 구조 확인 | 원본 데이터, README 데이터 섹션 |
 | M2 | 파서·정제·프로필 식별 모듈, 2개 프로필 샘플 데이터 생성 | `src/`, `data/sample/` |
 | M3 | 탐색 분석과 시각화 | `analysis.ipynb`, `images/` |
@@ -338,7 +338,7 @@ pip freeze > requirements.txt
 | 시청 기록에 시청 주체 정보가 없음 | 하나의 zip 안에서는 프로필 구분 불가 | 내보내기 단위로 프로필 라벨링(4.5) |
 | `channel.csv`가 없거나 구조가 다름 | 자동 식별 실패 | 파일명 → 사용자 입력 순으로 대체 |
 | 브랜드 계정 내보내기를 빠뜨림 | 해당 채널 분석에서 누락 | README 체크리스트, 개요 탭에 프로필 목록 표시 |
-| 가상환경 미활성화 상태로 실행 | 패키지 버전 불일치 | README 첫 단계에 활성화 명시, 노트북 커널 고정 |
+| 가상환경 미활성화 상태로 실행 | 패키지 버전 불일치 | README 첫 단계에 활성화 명시, 노트북은 `.venv` 인터프리터로 실행 |
 | 개인정보 노출 | 프라이버시 침해 | NFR-01~03 |
 
 ---

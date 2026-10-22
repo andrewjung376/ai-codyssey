@@ -13,3 +13,10 @@ results/
 # Python 캐시
 __pycache__/
 *.py[cod]
+
+# 원본 Takeout 데이터 (개인정보)
+data/raw/*
+!data/raw/.gitkeep
+
+# Jupyter
+.ipynb_checkpoints/
