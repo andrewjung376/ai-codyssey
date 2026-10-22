@@ -64,6 +64,20 @@ def find_gaps(series: pd.Series, max_zero_days: int = 7) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["start", "end", "days"])
 
 
+def combined_daily(events: pd.DataFrame) -> pd.DataFrame:
+    """서비스별 일별 건수와 합계(total) 열 (FR-21 통합 활동량)."""
+    daily = daily_counts(events)
+    daily["total"] = daily.sum(axis=1)
+    return daily
+
+
+def top_n(events: pd.DataFrame, column: str, n: int = 10, service: str | None = None) -> pd.Series:
+    """column 값(검색어·콘텐츠 채널·도메인 등)의 상위 n개 건수 (FR-07, FR-19)."""
+    if service is not None:
+        events = events[events["service"] == service]
+    return events[column].dropna().value_counts().head(n)
+
+
 def weekday_hour_matrix(events: pd.DataFrame) -> pd.DataFrame:
     """요일(월~일) × 시간(0~23) 활동 건수."""
     ts = events["ts_kst"]

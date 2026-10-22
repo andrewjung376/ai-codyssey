@@ -2,6 +2,7 @@
 
 폴더·파일 이름은 계정 언어에 따라 다르므로 경로에 기대지 않고 파일 내용으로 판별한다.
 - 활동 기록: `time` 필드가 있는 dict 목록인 JSON
+- Chrome 방문 기록(BrowserHistory): 최상위가 dict이고 `Browser History` 목록이 있는 JSON
 - 내 채널 정보: `Channel ID`(또는 `채널 ID`) 컬럼이 있는 CSV
 """
 from __future__ import annotations
@@ -15,6 +16,7 @@ from pathlib import Path, PurePath
 
 CHANNEL_ID_COLUMNS = ("Channel ID", "채널 ID")
 CHANNEL_TITLE_COLUMNS = ("Channel Title (Original)", "Channel Title", "채널 제목(원본)", "채널 제목")
+BROWSER_HISTORY_KEY = "Browser History"
 
 
 @dataclass
@@ -24,10 +26,12 @@ class TakeoutExport:
     activity_files: dict[str, list[dict]] = field(default_factory=dict)  # 내부 경로 → 활동 레코드
     channel: dict[str, str] | None = None  # {"id": ..., "title": ...}
     skipped: list[str] = field(default_factory=list)  # 활동 기록·채널 정보가 아니라 읽지 않은 파일
+    browser_history: dict[str, list[dict]] = field(default_factory=dict)  # 내부 경로 → Chrome 방문 기록
 
     @property
     def record_count(self) -> int:
-        return sum(len(records) for records in self.activity_files.values())
+        files = [*self.activity_files.values(), *self.browser_history.values()]
+        return sum(len(records) for records in files)
 
 
 def load_takeout(source: str | Path | bytes, name: str | None = None) -> TakeoutExport:
@@ -61,6 +65,9 @@ def _read_member(export: TakeoutExport, path: str, data: bytes) -> None:
             return
         if _is_activity_list(parsed):
             export.activity_files[path] = parsed
+            return
+        if isinstance(parsed, dict) and isinstance(parsed.get(BROWSER_HISTORY_KEY), list):
+            export.browser_history[path] = parsed[BROWSER_HISTORY_KEY]
             return
     elif suffix == ".csv":
         channel = _read_channel_csv(data)

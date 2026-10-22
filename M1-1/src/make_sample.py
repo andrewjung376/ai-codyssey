@@ -49,6 +49,22 @@ VISITED_SITES = [
     "https://example.com/travel",
     "https://example.org/recipe",
 ]
+# Chrome 방문 사이트 (URL 앞부분, 페이지 제목, 가중치). 실존 개인 정보 없음
+WEB_SITES = [
+    ("https://github.com/sample-user/sample-repo/blob/main/", "GitHub - sample-repo", 4),
+    ("https://docs.python.org/3/library/", "Python 문서", 3),
+    ("https://pandas.pydata.org/docs/reference/", "pandas 문서", 2),
+    ("https://news.example.com/article/", "샘플 뉴스", 2),
+    ("https://shop.example.net/item/", "샘플 쇼핑", 1),
+    ("https://blog.example.org/post/", "샘플 블로그", 1),
+    ("https://mail.example.com/inbox/", "받은편지함", 2),
+    ("https://drive.google.com/drive/folders/", "내 드라이브", 1),
+]
+WEB_LOCAL_RATE = 0.03      # localhost 방문 (제외 대상)
+WEB_SEARCH_RATE = 0.03     # Google 검색 결과 페이지 (search와 중복, 제외 대상)
+WEB_YOUTUBE_RATE = 0.02    # YouTube 시청 페이지 (yt_watch와 중복, 제외 대상)
+WEB_NO_URL_RATE = 0.01     # "Used Chrome" (URL 없음, 제외 대상)
+WEB_REPEAT_RATE = 0.05     # 20초 뒤 같은 도메인 재방문 (1건으로 묶일 대상)
 LOCATION_INFO = [{
     "name": "At this general area",
     "url": "https://www.google.com/maps/@?api=1&map_action=map&center=37.5,127.0&zoom=12",
@@ -88,6 +104,7 @@ PROFILES = [
             "search": ServiceConfig(base=12, weekend=0.7, slope=0.0),
             "yt_watch": ServiceConfig(base=15, weekend=1.6, slope=0.4),
             "yt_search": ServiceConfig(base=3, weekend=1.2, slope=0.0),
+            "web_visit": ServiceConfig(base=20, weekend=0.5, slope=0.2),
         },
         channels={
             "파이썬 공부 채널 A": 3, "데이터 분석 채널 B": 2, "여행 브이로그 C": 2,
@@ -186,7 +203,10 @@ def _generate_profile(cfg: ProfileConfig, rng: np.random.Generator) -> dict[str,
             for hour in hours:
                 ts = datetime(day.year, day.month, day.day, int(hour), int(rng.integers(60)),
                               int(rng.integers(60)), int(rng.integers(1_000_000)), tzinfo=KST)
-                records[svc].append(_make_record(cfg, svc, ts, i, rng, videos, channel_urls, channel_names, channel_p))
+                rec = _make_record(cfg, svc, ts, i, rng, videos, channel_urls, channel_names, channel_p)
+                records[svc].append(rec)
+                if svc == "web_visit" and rec.get("titleUrl") and rng.random() < WEB_REPEAT_RATE:
+                    records[svc].append({**rec, "time": _iso_utc(ts + timedelta(seconds=20), rng)})
 
     for svc in records:  # Takeout은 최신 기록이 먼저 나온다
         records[svc].sort(key=lambda r: r["time"], reverse=True)
@@ -211,6 +231,9 @@ def _make_record(cfg, svc, ts, day_index, rng, videos, channel_urls, channel_nam
             "time": time, "products": ["Search"], "activityControls": ["Web & App Activity"],
             "locationInfos": LOCATION_INFO,
         }
+
+    if svc == "web_visit":
+        return _make_web_record(cfg, time, rng)
 
     if svc == "yt_search":
         query = str(rng.choice(cfg.yt_queries))
@@ -244,6 +267,31 @@ def _make_record(cfg, svc, ts, day_index, rng, videos, channel_urls, channel_nam
         "titleUrl": f"https://www.youtube.com/watch?v={vid}",
         "subtitles": [{"name": channel, "url": channel_urls[channel]}],
         "time": time, "products": ["YouTube"], "activityControls": ["YouTube watch history"],
+    }
+
+
+def _make_web_record(cfg: ProfileConfig, time: str, rng: np.random.Generator) -> dict:
+    """내 활동 > Chrome 형식. 실제 내보내기처럼 titleUrl을 google.com/url?q= 로 감싼다."""
+    base = {"time": time, "products": ["Chrome"], "activityControls": ["Web & App Activity"]}
+    roll = rng.random()
+    if roll < WEB_NO_URL_RATE:
+        return {"header": "Chrome", "title": "Used Chrome", **base}
+    roll -= WEB_NO_URL_RATE
+    if roll < WEB_LOCAL_RATE:
+        url, title = "http://localhost:8501/", "Streamlit"
+    elif roll < WEB_LOCAL_RATE + WEB_SEARCH_RATE:
+        query = str(rng.choice(COMMON_QUERIES))
+        url, title = f"https://www.google.com/search?q={quote_plus(query)}", f"{query} - Google 검색"
+    elif roll < WEB_LOCAL_RATE + WEB_SEARCH_RATE + WEB_YOUTUBE_RATE:
+        url, title = f"https://www.youtube.com/watch?v={_video_id(rng)}", "YouTube"
+    else:
+        weights = np.array([w for *_, w in WEB_SITES], dtype=float)
+        prefix, title, _ = WEB_SITES[int(rng.choice(len(WEB_SITES), p=weights / weights.sum()))]
+        url = f"{prefix}{int(rng.integers(1, 200))}"
+    host = url.split("/")[2].removeprefix("www.")
+    return {
+        "header": host, "title": _title(cfg.lang, "visit", title),
+        "titleUrl": f"https://www.google.com/url?q={quote_plus(url)}&usg=AOvVaw0sample", **base,
     }
 
 
@@ -285,6 +333,8 @@ def _zip_layout(cfg: ProfileConfig, records: dict[str, list[dict]], rng: np.rand
         # 내 활동 > YouTube에는 시청 기록 일부가 똑같이 들어 있다 (중복 제거 검증용)
         dup = [r for r in records["yt_watch"] if rng.random() < MY_ACTIVITY_DUP_RATE]
         files["Takeout/My Activity/YouTube/MyActivity.json"] = dump(dup)
+    if "web_visit" in records:
+        files["Takeout/My Activity/Chrome/MyActivity.json"] = dump(records["web_visit"])
     return files
 
 

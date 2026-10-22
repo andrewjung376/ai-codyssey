@@ -3,8 +3,8 @@ import pandas as pd
 import pytest
 
 from src import make_sample
-from src.features import (daily_counts, find_gaps, flag_outliers, moving_average, pct_change,
-                          resample, weekday_hour_matrix)
+from src.features import (combined_daily, daily_counts, find_gaps, flag_outliers, moving_average, pct_change,
+                          resample, top_n, weekday_hour_matrix)
 from src.loader import load_takeout
 from src.profiles import build_events, channel_overlap
 
@@ -29,7 +29,7 @@ def test_sample_is_reproducible(tmp_path, exports):
 
 def test_loader_finds_files_in_english_and_korean_layouts(exports):
     personal, brand = exports
-    assert len(personal.activity_files) == 4 and personal.skipped == []
+    assert len(personal.activity_files) == 5 and personal.skipped == []
     assert len(brand.activity_files) == 2 and brand.skipped == []
     assert personal.channel == {"id": "UCsamplePersonal0000001", "title": PERSONAL}
     assert brand.channel["title"] == BRAND  # 한국어 헤더 CSV
@@ -46,8 +46,8 @@ def test_cleaning_rules_applied(result):
     assert not ev.duplicated(subset=["profile", "service", "ts_kst", "text"]).any()
     assert not ev["text"].str.startswith("광고 영상").any()
     assert all(s.ads_removed > 0 and s.deleted_videos > 0 for s in result.stats.values())
-    assert set(ev["service"].astype(str)) == {"search", "yt_watch", "yt_search"}
-    assert (ev.loc[ev["service"] == "search", "profile"] == "personal").all()
+    assert set(ev["service"].astype(str)) == {"search", "yt_watch", "yt_search", "web_visit"}
+    assert (ev.loc[ev["service"].isin(["search", "web_visit"]), "profile"] == "personal").all()
     # 한국어 title도 문구가 떼어져 있어야 한다
     assert not ev["text"].str.contains("시청했습니다").any()
 
@@ -96,3 +96,21 @@ def test_channel_overlap_between_profiles(result):
     row = personal_vs_brand.iloc[0]
     assert row["common_channels"] == ["요리 채널 D", "음악 플레이리스트 E"]
     assert 0 < row["jaccard"] < 1
+
+
+def test_web_visits_cleaned(result):
+    stats = result.stats["takeout-personal.zip"]
+    assert stats.web_excluded > 0 and stats.web_repeats_merged > 0 and stats.unsupported > 0
+    web = result.events[result.events["service"] == "web_visit"]
+    assert len(web) > 1000
+    assert not web["domain"].isin(["localhost", "google.com"]).any()
+    assert not web["domain"].str.contains("/").any()
+    assert set(top_n(result.events, "domain", 3, service="web_visit").index) <= {
+        "github.com", "docs.python.org", "pandas.pydata.org", "news.example.com", "mail.example.com"}
+
+
+def test_combined_daily_total(result):
+    daily = combined_daily(result.events)
+    assert "web_visit" in daily.columns
+    assert (daily["total"] == daily.drop(columns="total").sum(axis=1)).all()
+    assert daily["total"].sum() == len(result.events)

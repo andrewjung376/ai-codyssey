@@ -13,7 +13,7 @@ from pathlib import PurePath
 import pandas as pd
 
 from .loader import TakeoutExport
-from .parser import EVENT_COLUMNS, ParseStats, parse_records
+from .parser import EVENT_COLUMNS, ParseStats, parse_browser_history, parse_records
 
 DEDUP_KEY = ["profile", "service", "ts_kst", "text"]
 # Takeout 기본 파일 이름(takeout-20261022T061522Z-001)은 프로필 이름으로 쓸 수 없다
@@ -46,12 +46,16 @@ def identify_profile(export: TakeoutExport, unknown_index: int = 1) -> Profile:
     return Profile(f"unknown-{unknown_index}", None, "unknown", export.name)
 
 
-def build_events(exports: list[TakeoutExport], labels: dict[str, str] | None = None) -> MergeResult:
+def build_events(exports: list[TakeoutExport], labels: dict[str, str] | None = None,
+                 exclude_domains=()) -> MergeResult:
     """내보내기 여러 개를 하나의 events DataFrame으로 합친다.
 
     labels: {내보내기 이름: 사용자가 정한 프로필 라벨}. 자동 식별 결과보다 우선한다 (FR-15).
+    exclude_domains: 웹 방문 분석에서 뺄 도메인 (하위 도메인 포함, FR-20).
+    BrowserHistory가 하나라도 있으면 내 활동 > Chrome 레코드는 쓰지 않는다 (소스 중복 방지).
     """
     labels = labels or {}
+    use_browser_history = any(e.browser_history for e in exports)
     profiles, stats, frames, warnings = [], {}, [], []
     seen: dict[str, str] = {}  # 프로필 키 → 처음 나온 내보내기 이름
     unknown_index = 1
@@ -72,8 +76,14 @@ def build_events(exports: list[TakeoutExport], labels: dict[str, str] | None = N
         profiles.append(profile)
 
         records = [r for recs in export.activity_files.values() for r in recs]
-        df, stats[export.name] = parse_records(records, profile.label, profile.profile_id)
+        df, stats[export.name] = parse_records(records, profile.label, profile.profile_id,
+                                               exclude_domains, skip_chrome=use_browser_history)
         frames.append(df)
+        history = [r for recs in export.browser_history.values() for r in recs]
+        if history:
+            df, history_stats = parse_browser_history(history, exclude_domains)
+            stats[export.name] += history_stats
+            frames.append(df)
 
     frames = [f for f in frames if not f.empty]
     events = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=EVENT_COLUMNS)
