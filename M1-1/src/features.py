@@ -128,7 +128,11 @@ def phase_summary(events: pd.DataFrame, series: pd.Series, phases: list[tuple[st
             "오후(12~17시) %": hours.between(12, 17).mean() * 100 if len(hours) else np.nan,
             "저녁·심야(18~5시) %": (~hours.between(6, 17)).mean() * 100 if len(hours) else np.nan,
         }
-    return pd.DataFrame(rows).T
+    table = pd.DataFrame(rows).T
+    if not table.empty:  # "기간" 문자열 때문에 object가 된 숫자 열을 float로 되돌린다 (round가 먹도록)
+        numeric = table.columns.drop("기간")
+        table[numeric] = table[numeric].astype(float)
+    return table
 
 
 def weekday_hour_matrix(events: pd.DataFrame) -> pd.DataFrame:

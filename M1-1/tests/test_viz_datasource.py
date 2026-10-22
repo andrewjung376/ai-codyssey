@@ -122,6 +122,7 @@ def test_assign_phase_and_summary():
     table = F.phase_summary(events, series, PHASES)
     assert list(table.index) == ["재직", "퇴사 후", "AI 교육", "AI 과정"]
     assert table.loc["퇴사 후", "일수"] == 26 and table.loc["AI 과정", "피크 시간"] == 14
+    assert table.drop(columns="기간").dtypes.eq(float).all()  # round(1)이 적용되려면 숫자 타입이어야 한다
 
 
 def test_phase_figures_render(dirs, tmp_path):
