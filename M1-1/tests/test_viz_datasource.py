@@ -104,3 +104,32 @@ def test_outliers_on_sparse_series_use_active_days_only():
     flagged = F.flag_outliers(sparse)
     assert flagged.sum() == 1 and flagged.iloc[-1]
     assert not F.flag_outliers(pd.Series([0, 0, 0])).any()
+
+
+PHASES = [("재직", "2025-01-01"), ("퇴사 후", "2026-04-01"), ("AI 교육", "2026-04-27"), ("AI 과정", "2026-07-01")]
+
+
+def test_assign_phase_and_summary():
+    import pandas as pd
+    dates = pd.DatetimeIndex(["2025-12-31", "2026-04-01", "2026-04-26", "2026-04-27", "2026-10-01"])
+    assert list(F.assign_phase(dates, PHASES)) == ["재직", "퇴사 후", "퇴사 후", "AI 교육", "AI 과정"]
+    aware = pd.Series(pd.to_datetime(["2026-03-31T23:30:00+09:00", "2026-04-01T00:10:00+09:00"]))
+    assert list(F.assign_phase(aware, PHASES)) == ["재직", "퇴사 후"]  # KST 날짜 기준
+
+    idx = pd.date_range("2026-03-25", "2026-07-05", freq="D")
+    series = pd.Series(1, index=idx)
+    events = pd.DataFrame({"ts_kst": (idx + pd.Timedelta(hours=14)).tz_localize("Asia/Seoul")})
+    table = F.phase_summary(events, series, PHASES)
+    assert list(table.index) == ["재직", "퇴사 후", "AI 교육", "AI 과정"]
+    assert table.loc["퇴사 후", "일수"] == 26 and table.loc["AI 과정", "피크 시간"] == 14
+
+
+def test_phase_figures_render(dirs, tmp_path):
+    raw, sample = dirs
+    ds = load_dataset("sample", raw_dir=raw, sample_dir=sample)
+    series = F.daily_by_service(ds.events)
+    for fig in (viz.plot_phase_compare(ds.events, series, PHASES, ds.sources),
+                viz.plot_daily_trend(series, ds.sources, phases=PHASES),
+                viz.plot_combined_activity(series, ds.sources, phases=PHASES)):
+        assert viz.save(fig, "p.png", tmp_path).stat().st_size > 0
+        plt.close(fig)

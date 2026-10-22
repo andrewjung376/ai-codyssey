@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import font_manager
 
-from .features import WEEKDAYS, moving_average
+from .features import WEEKDAYS, assign_phase, moving_average
 
 ROOT = Path(__file__).resolve().parent.parent
 IMAGES_DIR = ROOT / "images"
@@ -51,7 +51,18 @@ def _ordered(series: dict[str, pd.Series]) -> list[str]:
     return [s for s in SERVICE_NAMES if s in series] + [s for s in series if s not in SERVICE_NAMES]
 
 
-def plot_daily_trend(series: dict[str, pd.Series], sources=None, windows=(7, 28)) -> plt.Figure:
+def _draw_phases(ax, phases, with_text: bool = True) -> None:
+    """생활 단계 시작일에 세로 점선과 단계 이름을 그린다. phases: [(이름, 시작일)]."""
+    if not phases:
+        return
+    for name, start in phases[1:]:
+        ax.axvline(pd.Timestamp(start), color="#555555", ls=":", lw=1.1)
+        if with_text:
+            ax.text(pd.Timestamp(start), 0.97, f" {name}", transform=ax.get_xaxis_transform(),
+                    va="top", ha="left", fontsize=8, color="#333333")
+
+
+def plot_daily_trend(series: dict[str, pd.Series], sources=None, windows=(7, 28), phases=None) -> plt.Figure:
     """서비스별 일별 건수와 이동평균 (Q1)."""
     services = _ordered(series)
     fig, axes = plt.subplots(len(services), 1, figsize=(12, 2.6 * len(services)), sharex=True, squeeze=False)
@@ -61,7 +72,8 @@ def plot_daily_trend(series: dict[str, pd.Series], sources=None, windows=(7, 28)
         for w, style in zip(windows, ("-", "--")):
             ax.plot(s.index, moving_average(s, w), color=color, lw=1.8 if w == windows[0] else 1.4,
                     ls=style, label=f"{w}일 이동평균")
-        ax.set_title(service_label(svc, sources), loc="left", fontsize=11)
+        _draw_phases(ax, phases, with_text=ax is axes[0, 0])
+        ax.set_title(service_label(svc, sources), loc="left", fontsize=11, pad=14 if phases else 6)
         ax.set_ylabel("건수")
         ax.legend(loc="upper left", fontsize=8, ncol=3)
     fig.suptitle("서비스별 일별 활동과 이동평균", fontsize=13, x=0.01, ha="left")
@@ -112,7 +124,7 @@ def plot_heatmaps(matrices: dict[str, pd.DataFrame], sources=None) -> plt.Figure
 
 
 def plot_outliers_gaps(series: dict[str, pd.Series], outliers: dict[str, pd.Series],
-                       gaps: dict[str, pd.DataFrame], sources=None) -> plt.Figure:
+                       gaps: dict[str, pd.DataFrame], sources=None, phases=None) -> plt.Figure:
     """일별 건수에 이상치(●)와 기록 중단 의심 구간(회색 음영)을 표시한다 (Q3, 데이터 품질)."""
     services = _ordered(series)
     fig, axes = plt.subplots(len(services), 1, figsize=(12, 2.4 * len(services)), sharex=True, squeeze=False)
@@ -124,6 +136,7 @@ def plot_outliers_gaps(series: dict[str, pd.Series], outliers: dict[str, pd.Seri
                    label=f"이상치 {len(flagged)}일")
         for _, g in gaps[svc].iterrows():
             ax.axvspan(g["start"], g["end"] + pd.Timedelta(days=1), color="gray", alpha=0.25, lw=0)
+        _draw_phases(ax, phases, with_text=False)
         ax.set_title(f"{service_label(svc, sources)}  (기록 중단 의심 {len(gaps[svc])}구간)", loc="left", fontsize=11)
         ax.set_ylabel("건수")
         ax.legend(loc="upper left", fontsize=8)
@@ -176,7 +189,7 @@ def plot_profile_compare(watch_events: pd.DataFrame) -> plt.Figure:
 
 
 def plot_domain_trend(web_events: pd.DataFrame, label_column: str = "label", k: int = 6,
-                      title_suffix: str = "") -> plt.Figure:
+                      title_suffix: str = "", phases=None) -> plt.Figure:
     """상위 k개 도메인(가린 이름)의 월별 방문 추세 (Q7)."""
     top = web_events[label_column].value_counts().head(k).index
     month = web_events["ts_kst"].dt.tz_localize(None).dt.to_period("M").dt.to_timestamp()
@@ -185,13 +198,14 @@ def plot_domain_trend(web_events: pd.DataFrame, label_column: str = "label", k: 
     for col in table.columns:
         ax.plot(table.index, table[col], marker="o", ms=4, label=str(col))
     ax.set(ylabel="월 방문 수")
+    _draw_phases(ax, phases)
     ax.legend(fontsize=9, ncol=3, loc="upper left")
     ax.set_title(f"상위 {k}개 도메인 월별 방문 추세{title_suffix}", loc="left", fontsize=13)
     fig.tight_layout()
     return fig
 
 
-def plot_combined_activity(series: dict[str, pd.Series], sources=None) -> plt.Figure:
+def plot_combined_activity(series: dict[str, pd.Series], sources=None, phases=None) -> plt.Figure:
     """서비스별 주간 활동량 누적 영역 (Q7). 모든 서비스에 데이터가 있는 공통 기간만 그린다."""
     services = _ordered(series)
     start = max(series[s].index.min() for s in services)
@@ -202,7 +216,42 @@ def plot_combined_activity(series: dict[str, pd.Series], sources=None) -> plt.Fi
     ax.stackplot(weekly.index, weekly.T.to_numpy(), labels=[service_label(s, sources) for s in services],
                  colors=[SERVICE_COLORS.get(s, "gray") for s in services], alpha=0.85)
     ax.set(ylabel="주간 건수")
+    visible = [(n, d) for n, d in (phases or []) if start < pd.Timestamp(d) <= end]
+    _draw_phases(ax, [("", start), *visible])  # 첫 항목은 선을 긋지 않으므로 공통 기간 시작일을 자리로 넣는다
     ax.legend(loc="upper left", fontsize=9, ncol=len(services))
     ax.set_title(f"서비스별 주간 활동량 ({start:%Y-%m-%d} ~ {end:%Y-%m-%d})", loc="left", fontsize=13)
+    fig.tight_layout()
+    return fig
+
+
+def plot_phase_compare(events: pd.DataFrame, series: dict[str, pd.Series], phases, sources=None,
+                       hour_service: str = "web_visit") -> plt.Figure:
+    """생활 단계별 일평균 사용량(왼쪽)과 hour_service의 시간대별 비율(오른쪽) (Q8)."""
+    names = [n for n, _ in phases]
+    services = _ordered(series)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4), gridspec_kw={"width_ratios": [1, 1.4]})
+    width = 0.8 / len(services)
+    for i, svc in enumerate(services):
+        s = series[svc]
+        phase = assign_phase(s.index, phases).to_numpy()
+        means = [s[phase == n].mean() if (phase == n).any() else np.nan for n in names]
+        bars = ax1.bar(np.arange(len(names)) + i * width, means, width,
+                       label=service_label(svc, sources), color=SERVICE_COLORS.get(svc, "gray"))
+        ax1.bar_label(bars, fmt="%.1f", fontsize=8)
+    ax1.set_xticks(np.arange(len(names)) + width * (len(services) - 1) / 2, names, fontsize=9)
+    ax1.set(title="단계별 일평균 건수", ylabel="건수/일")
+    ax1.legend(fontsize=8)
+
+    ev = events[events["service"] == hour_service]
+    phase = assign_phase(ev["ts_kst"], phases).to_numpy()
+    for n in names:
+        hours = ev.loc[phase == n, "ts_kst"].dt.hour
+        if len(hours):
+            share = hours.value_counts(normalize=True).reindex(range(24), fill_value=0) * 100
+            ax2.plot(share.index, share.values, marker="o", ms=3, label=f"{n} ({len(hours):,}건)")
+    ax2.set_xticks(range(0, 24, 3), [f"{h}시" for h in range(0, 24, 3)])
+    ax2.set(title=f"단계별 시간대 분포: {service_label(hour_service, sources)}", ylabel="비율(%)")
+    ax2.legend(fontsize=8)
+    fig.suptitle("생활 단계별 사용량과 리듬", fontsize=13, x=0.01, ha="left")
     fig.tight_layout()
     return fig
