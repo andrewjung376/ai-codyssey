@@ -232,4 +232,4 @@ if "생활 단계" in tabs:
             st.dataframe(F.phase_summary(fev[fev["service"] == s], x, phases).round(1), use_container_width=True)
 
 with tabs["심화"]:
-    st.info("시계열 분해(STL)와 베이스라인 예측은 다음 단계(M6)에서 추가됩니다.")
+    st.info("시계열 분해(STL)와 베이스라인 예측은 향후 계획입니다. 계획은 저장소의 future_plan.md에 있습니다.")
