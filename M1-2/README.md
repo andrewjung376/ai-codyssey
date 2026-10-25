@@ -10,9 +10,9 @@
 
 | 구분 | URL |
 | --- | --- |
-| 프론트엔드 (Vercel) | `https://<vercel-프로젝트>.vercel.app` ← 배포 후 기입 |
-| 백엔드 API (Render) | `https://<render-서비스>.onrender.com` ← 배포 후 기입 |
-| Swagger UI | `https://<render-서비스>.onrender.com/docs` |
+| 프론트엔드 (Vercel) | https://ai-codyssey-frontend.vercel.app |
+| 백엔드 API (Render) | https://mystock-ai-api.onrender.com |
+| Swagger UI | https://mystock-ai-api.onrender.com/docs |
 
 > Render 무료 티어는 15분간 요청이 없으면 잠듭니다. 첫 접속 시 프론트가 `/health` 를 호출하며
 > "서버를 깨우는 중" 배너를 띄우고, 깨어날 때까지(최대 90초) 자동으로 재시도합니다.
@@ -138,7 +138,7 @@ python -m http.server 5500
 | `OPENAI_MODEL` | 백엔드 | 폴백 모델명, 기본 `gpt-4o-mini` |
 | `OPENAI_MAX_TOKENS` | 백엔드 | 폴백 경로 응답 토큰 상한, 기본 600 (과금 방지) |
 | `STORAGE_BACKEND` | 백엔드 | `firestore`(기본) 또는 `memory` |
-| `API_BASE_URL` | 프론트(Vercel) | 백엔드 주소, 예 `https://<render-서비스>.onrender.com` |
+| `API_BASE_URL` | 프론트(Vercel) | 백엔드 주소, 예 `https://mystock-ai-api.onrender.com` |
 
 로컬에서는 `backend/.env` 값이 OS 환경 변수보다 우선합니다(시스템에 같은 이름의 변수가 있어도 `.env` 값 사용). Render에는 `.env` 가 없으므로 대시보드 환경 변수가 쓰입니다.
 
@@ -153,24 +153,39 @@ python -m http.server 5500
    - Build Command: `pip install -r requirements.txt`
    - Start Command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
    - Instance Type: Free
-3. Environment: `CODY_OPENAI_API_KEY`, `OPENAI_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON`(키 JSON 전체를 한 줄로), `ALLOWED_ORIGINS`(Vercel URL), `PYTHON_VERSION=3.13.5`
-4. 배포 후 `https://<서비스>.onrender.com/docs` 에서 Swagger 확인
+3. Environment: `CODY_OPENAI_API_KEY`, `OPENAI_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON`, `STORAGE_BACKEND=firestore`, `ALLOWED_ORIGINS`(Vercel URL), `PYTHON_VERSION=3.13.5`
+   - Firebase 키는 **Secret Files** 에 `firebase-key.json` 으로 올리고 `FIREBASE_SERVICE_ACCOUNT_JSON=/etc/secrets/firebase-key.json` 으로 지정하거나, 환경 변수 값에 키 JSON 내용 전체를 넣습니다.
+   - (선택) Health Check Path: `/health`
+4. 배포 후 https://mystock-ai-api.onrender.com/docs 에서 Swagger 확인
 
 ### 프론트엔드 — Vercel
 1. Vercel → **Add New → Project** → 같은 저장소 선택
 2. Root Directory: `M1-2/frontend` (Framework Preset: Other — 빌드 설정은 `vercel.json` 이 지정)
-3. Environment Variables: `API_BASE_URL=https://<서비스>.onrender.com`
+3. Environment Variables: `API_BASE_URL=https://mystock-ai-api.onrender.com`
 4. 배포 후 Vercel URL을 Render의 `ALLOWED_ORIGINS` 에 추가하고 백엔드를 재배포
+   (예: `https://ai-codyssey-frontend.vercel.app,http://localhost:5500` — 끝의 `/` 는 서버가 자동으로 제거)
 
 정적 사이트는 런타임에 환경 변수를 읽을 수 없어서, 빌드 단계(`node build-config.js`)에서 `API_BASE_URL` 을 `config.js` 로 구워 넣습니다.
 
 ## 제출 스크린샷
 
-| 화면 | 이미지 |
-| --- | --- |
-| 데이터 요약이 보이는 채팅 화면 (질문 + 답변) | `docs/screenshots/chat.png` ← 배포 후 추가 |
-| 데이터 관리 화면 (CRUD 동작) | `docs/screenshots/data.png` ← 배포 후 추가 |
-| 대화 기록 화면 (불러오기 동작) | `docs/screenshots/history.png` ← 배포 후 추가 |
+배포 사이트(https://ai-codyssey-frontend.vercel.app)에서 촬영했습니다.
+
+### 1. 데이터 요약이 보이는 채팅 화면 (질문 + 답변)
+상단의 요약(기간·개수·트렌드·통계)과 그래프가 시스템 프롬프트에 주입되어, 답변이 실제 수치(최근 20개 구간 -20.8%, 최고 362,500원·2026-06-18)를 근거로 합니다.
+채팅 상단에 사용한 키(`CODY_OPENAI_API_KEY`)와 반영된 요약이 표시됩니다.
+
+![데이터 요약이 보이는 채팅 화면](docs/screenshots/chat.png)
+
+### 2. 데이터 관리 화면 (수정 동작)
+최신 행(2026-10-26)의 값과 메모를 수정해 저장한 직후입니다. 저장 결과 메시지와 함께 목록이 갱신되고 수정된 행이 강조됩니다.
+
+![데이터 관리 화면](docs/screenshots/data.png)
+
+### 3. 대화 기록 화면 (불러오기 동작)
+왼쪽 목록에서 이전 대화 "최근 추세가 어때?"를 선택해, 저장된 메시지 4개를 다시 불러온 화면입니다.
+
+![대화 기록 불러오기 화면](docs/screenshots/history.png)
 
 ## 보너스 구현 (5.2)
 - 추가 지표: 일간 변동성(일간 변화율 표준편차), 5·20일 이동평균, 기간 변화율, 월별 통계
@@ -178,6 +193,22 @@ python -m http.server 5500
 - 내보내기: CSV(엑셀 한글 호환 BOM 포함) / JSON(요약 포함) 다운로드
 - 다크 모드 토글 (설정 기억, 시스템 테마 기본값)
 
+## 설계 메모
+
+### Firestore 컬렉션 구조
+| 컬렉션 | 문서 필드 | 비고 |
+| --- | --- | --- |
+| `data` | `date`(YYYY-MM-DD 문자열), `value`, `memo`, `created_at`, `updated_at` | `date` 로 정렬·중복 검사. 문자열 날짜는 사전순 = 시간순이라 별도 인덱스 없이 정렬됩니다. |
+| `conversations` | `title`, `messages[{role, content}]`, `message_count`, `created_at`, `updated_at` | 목록 조회는 `select()` 로 `messages` 를 빼고 읽어 전송량을 줄입니다. |
+
+서버는 Firebase Admin SDK(서비스 계정)로 접근하므로 브라우저는 Firestore에 직접 접근하지 않습니다. 데이터베이스는 프로덕션 모드(클라이언트 접근 차단)로 두면 됩니다.
+
+### 배포 환경에서 CORS·환경 변수·키 관리가 필요한 이유
+- **CORS**: 프론트(`vercel.app`)와 백엔드(`onrender.com`)의 출처가 달라, 브라우저는 서버가 허용한 출처의 요청만 응답을 읽게 합니다. `ALLOWED_ORIGINS` 로 우리 프론트만 허용하고 나머지 출처는 거부합니다.
+- **환경 변수**: 로컬·Render·Vercel마다 값(API 주소, 허용 도메인, 저장소 종류)이 달라서, 코드는 그대로 두고 설정만 바꿔 배포할 수 있게 합니다.
+- **키 관리**: OpenAI·Codyssey 키와 Firebase 서비스 계정 키가 코드나 git에 들어가면 누구나 과금을 일으키거나 DB 전체에 접근할 수 있습니다. 그래서 키는 서버 환경 변수(Secret File)에만 두고, 브라우저에는 백엔드 주소만 전달합니다.
+
 ## 비용 주의
 - 질문 1회당 시스템 프롬프트(요약 + 월별 통계 + 최근 10개)와 직전 대화 10개가 함께 전송됩니다.
-- `OPENAI_MAX_TOKENS` 로 응답 길이를 제한하고, OpenAI 대시보드에서 사용 한도(Usage limit)를 설정해 두세요.
+- `OPENAI_MAX_TOKENS` 로 폴백(OpenAI) 경로의 응답 길이를 제한합니다. Cody 프록시(`gpt-5-mini`)는 추론 토큰이 출력 상한에 포함돼 빈 답이 나올 수 있어 상한을 보내지 않습니다.
+- OpenAI 대시보드에서 사용 한도(Usage limit)를 설정해 두세요.
