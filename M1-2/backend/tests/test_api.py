@@ -2,6 +2,13 @@ def test_health(client):
     assert client.get("/health").json()["status"] == "ok"
 
 
+def test_allowed_origins_normalized():
+    from core.config import _split_origins
+
+    assert _split_origins(" https://a.vercel.app/ , http://localhost:5500,,") == [
+        "https://a.vercel.app", "http://localhost:5500"]
+
+
 def test_docs_available(client):
     assert client.get("/docs").status_code == 200
     paths = client.get("/openapi.json").json()["paths"]

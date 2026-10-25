@@ -15,8 +15,9 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BACKEND_DIR / ".env", override=True)
 
 
-def _split_csv(raw: str) -> list[str]:
-    return [item.strip() for item in raw.split(",") if item.strip()]
+def _split_origins(raw: str) -> list[str]:
+    # 브라우저 Origin 헤더에는 끝 "/"가 없으므로, "https://x.vercel.app/" 처럼 입력해도 맞도록 지운다
+    return [item.strip().rstrip("/") for item in raw.split(",") if item.strip()]
 
 
 @dataclass(frozen=True)
@@ -37,7 +38,7 @@ class Settings:
     # firestore(기본) | memory(키 없이 로컬 개발·테스트할 때)
     storage_backend: str = os.getenv("STORAGE_BACKEND", "firestore").lower()
     allowed_origins: list[str] = field(
-        default_factory=lambda: _split_csv(
+        default_factory=lambda: _split_origins(
             os.getenv("ALLOWED_ORIGINS", "http://localhost:5500,http://127.0.0.1:5500")
         )
     )
