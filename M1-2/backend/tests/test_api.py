@@ -156,8 +156,33 @@ def test_chat_without_key_returns_503(client, monkeypatch):
     app.dependency_overrides.pop(llm_dependency)
     monkeypatch.setattr(llm_module, "settings",
                         dataclasses.replace(llm_module.settings, cody_api_key="", openai_api_key=""))
-    llm_module.get_llm.cache_clear()
+    llm_module._build_llm.cache_clear()
     try:
         assert client.post("/api/chat", json={"message": "x"}).status_code == 503
     finally:
-        llm_module.get_llm.cache_clear()
+        llm_module._build_llm.cache_clear()
+
+
+def test_repository_created_once_under_concurrent_first_requests(monkeypatch):
+    import threading
+    import time
+
+    from services import repository as repo_module
+
+    calls = []
+
+    def slow_create():
+        calls.append(1)
+        time.sleep(0.1)  # Firebase 초기화처럼 느린 생성
+        return repo_module.MemoryRepository()
+
+    monkeypatch.setattr(repo_module, "_repo", None)
+    monkeypatch.setattr(repo_module, "_create_repository", slow_create)
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(repo_module.get_repository())) for _ in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(calls) == 1
+    assert len({id(r) for r in results}) == 1

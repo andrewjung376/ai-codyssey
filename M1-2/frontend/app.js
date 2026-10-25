@@ -305,7 +305,11 @@ function exportJson() {
   download(`data_${today()}.json`, JSON.stringify(payload, null, 2), 'application/json');
 }
 
-function today() { return new Date().toISOString().slice(0, 10); }
+// 현지(브라우저) 날짜 YYYY-MM-DD — toISOString()은 UTC라 한국 오전 9시 전에는 전날이 된다
+function today() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 /* ── 대화 기록 ───────────────────────────── */
 async function loadConversations() {

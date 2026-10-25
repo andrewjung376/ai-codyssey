@@ -7,6 +7,7 @@
 """
 
 import logging
+import threading
 from functools import lru_cache
 from typing import Protocol
 
@@ -137,9 +138,17 @@ class FallbackLLM:
         raise last_error
 
 
-@lru_cache
+_llm_lock = threading.Lock()
+
+
 def get_llm() -> LLMClient:
     """FastAPI 의존성. 키가 하나도 없으면 채팅 요청 시점에 503을 돌려준다."""
+    with _llm_lock:  # 동시 첫 요청에서도 클라이언트를 한 번만 만든다
+        return _build_llm()
+
+
+@lru_cache
+def _build_llm() -> LLMClient:
     providers: list[tuple[str, object]] = []
     if settings.cody_api_key:
         providers.append((KEY_SOURCE_CODY, CodyProxyClient(

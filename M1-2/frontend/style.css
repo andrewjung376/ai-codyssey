@@ -201,4 +201,9 @@ footer { text-align: center; color: var(--muted); font-size: .8rem; padding: 12p
   .msg { max-width: 92%; }
   .stat.wide { grid-column: span 1; }
   .brand-sub, .hint { display: none; }
+  /* 좁은 화면: 날짜는 한 줄, 수정/삭제는 세로로 쌓아 표 안에 들어오게 */
+  .data-table th, .data-table td { padding: 8px; }
+  .data-table td:first-child { white-space: nowrap; }
+  .data-table td.row-actions { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+  .row-actions .btn { margin-left: 0; padding: 4px 10px; }
 }

@@ -12,8 +12,8 @@ Firestore 문서 구조
 import datetime as dt
 import json
 import os
+import threading
 import uuid
-from functools import lru_cache
 from typing import Protocol
 
 from core.config import settings
@@ -220,9 +220,11 @@ class FirestoreRepository:
         return True
 
 
-@lru_cache
-def get_repository() -> Repository:
-    """FastAPI 의존성. 테스트에서는 dependency_overrides 로 교체한다."""
+_repo: Repository | None = None
+_repo_lock = threading.Lock()
+
+
+def _create_repository() -> Repository:
     if settings.storage_backend == "memory":
         from services.seed import load_seed_items
 
@@ -230,3 +232,17 @@ def get_repository() -> Repository:
         repo.bulk_insert_data(load_seed_items())
         return repo
     return FirestoreRepository(settings.firebase_service_account)
+
+
+def get_repository() -> Repository:
+    """FastAPI 의존성. 테스트에서는 dependency_overrides 로 교체한다.
+
+    서버가 막 켜진 뒤 첫 요청 여러 개가 동시에 오면 Firebase 앱 초기화가 두 번 일어나
+    "default app already exists" 오류(500)가 날 수 있어, 잠금으로 한 번만 만든다.
+    """
+    global _repo
+    if _repo is None:
+        with _repo_lock:
+            if _repo is None:
+                _repo = _create_repository()
+    return _repo
