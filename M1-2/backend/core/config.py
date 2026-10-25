@@ -10,7 +10,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BACKEND_DIR / ".env")
+# 로컬에서는 .env 값이 OS 환경 변수(예: 시스템에 등록된 OPENAI_API_KEY)보다 우선한다.
+# 배포(Render)에는 .env 파일이 없으므로 대시보드 환경 변수가 그대로 쓰인다.
+load_dotenv(BACKEND_DIR / ".env", override=True)
 
 
 def _split_csv(raw: str) -> list[str]:

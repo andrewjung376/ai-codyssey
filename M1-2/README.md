@@ -140,6 +140,8 @@ python -m http.server 5500
 | `STORAGE_BACKEND` | 백엔드 | `firestore`(기본) 또는 `memory` |
 | `API_BASE_URL` | 프론트(Vercel) | 백엔드 주소, 예 `https://<render-서비스>.onrender.com` |
 
+로컬에서는 `backend/.env` 값이 OS 환경 변수보다 우선합니다(시스템에 같은 이름의 변수가 있어도 `.env` 값 사용). Render에는 `.env` 가 없으므로 대시보드 환경 변수가 쓰입니다.
+
 키와 서비스 계정 정보는 코드·git에 두지 않습니다. `.env` 와 키 파일(`*firebase-adminsdk*.json`)은 `.gitignore` 로 제외돼 있습니다.
 
 ## 배포
