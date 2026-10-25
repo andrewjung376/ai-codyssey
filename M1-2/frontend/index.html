@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Data AI 비서</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <link rel="stylesheet" href="style.css" />
+  <script>
+    // 테마를 렌더 전에 적용해 깜빡임 방지
+    (function () {
+      let saved = null;
+      try { saved = localStorage.getItem('theme'); } catch (_) {}
+      const light = saved ? saved === 'light' : !matchMedia('(prefers-color-scheme: dark)').matches;
+      if (light) document.documentElement.classList.add('light');
+    })();
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+
+<div class="banner" id="coldBanner" hidden>
+  ⏳ 서버를 깨우는 중입니다… Render 무료 티어는 한동안 요청이 없으면 잠들어, 첫 접속에 최대 1분 정도 걸릴 수 있어요.
+</div>
+
+<header>
+  <div class="brand">
+    <span class="brand-mark">◆</span>
+    <div>
+      <div class="brand-title">My Data AI 비서</div>
+      <div class="brand-sub" id="datasetName">내 데이터를 아는 AI</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="status" id="serverStatus"><span class="dot"></span>연결 확인 중</span>
+    <button class="icon-btn" id="themeBtn" title="다크/라이트 모드 전환" aria-label="테마 전환">☀️</button>
+  </div>
+</header>
+
+<main>
+  <!-- 데이터 요약 -->
+  <section class="card">
+    <div class="section-head">
+      <h2>데이터 요약</h2>
+      <span class="hint">AI 답변의 근거로 시스템 프롬프트에 주입됩니다</span>
+    </div>
+    <div class="summary-grid" id="summaryGrid">
+      <div class="stat skeleton"></div><div class="stat skeleton"></div>
+      <div class="stat skeleton"></div><div class="stat skeleton"></div>
+    </div>
+    <div class="chart-wrap"><canvas id="trendChart" aria-label="데이터 추이 그래프"></canvas></div>
+  </section>
+
+  <!-- 채팅 + 대화 기록 -->
+  <section class="chat-layout">
+    <aside class="card history">
+      <div class="section-head">
+        <h2>대화 기록</h2>
+        <button class="btn small" id="newChatBtn">+ 새 대화</button>
+      </div>
+      <ul class="conv-list" id="convList"><li class="empty">불러오는 중…</li></ul>
+    </aside>
+
+    <div class="card chat">
+      <div class="section-head">
+        <h2 id="chatTitle">새 대화</h2>
+        <span class="hint" id="chatMeta">대화는 자동 저장됩니다</span>
+      </div>
+      <div class="messages" id="messages">
+        <div class="welcome" id="welcome">
+          <p>저장된 데이터를 바탕으로 답해 드려요. 이렇게 물어보세요.</p>
+          <div class="chips">
+            <button class="chip">최근 추세가 어때?</button>
+            <button class="chip">가장 높았던 때는 언제야?</button>
+            <button class="chip">월별로 비교해 줘</button>
+            <button class="chip">변동성이 컸던 날을 알려줘</button>
+          </div>
+        </div>
+      </div>
+      <form class="composer" id="chatForm">
+        <textarea id="chatInput" rows="1" maxlength="2000" placeholder="데이터에 대해 질문하세요 (Enter 전송, Shift+Enter 줄바꿈)" required></textarea>
+        <button class="btn primary" id="sendBtn" type="submit">전송</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- 데이터 관리 -->
+  <section class="card">
+    <div class="section-head">
+      <h2>데이터 관리</h2>
+      <div class="actions">
+        <button class="btn small" id="exportCsv">CSV 내보내기</button>
+        <button class="btn small" id="exportJson">JSON 내보내기</button>
+      </div>
+    </div>
+    <form class="data-form" id="dataForm">
+      <label>날짜<input type="date" id="f-date" required /></label>
+      <label>값<input type="number" id="f-value" min="0" step="any" placeholder="예: 61200" required /></label>
+      <label class="grow">메모<input type="text" id="f-memo" maxlength="200" placeholder="선택 입력" /></label>
+      <button class="btn primary" type="submit" id="addBtn">+ 추가</button>
+    </form>
+    <div class="toast" id="dataMsg" role="status"></div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>날짜</th><th class="num">값</th><th>메모</th><th></th></tr></thead>
+        <tbody id="dataBody"><tr><td colspan="4" class="empty">불러오는 중…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="table-foot">
+      <span id="dataCount"></span>
+      <button class="btn small" id="moreBtn" hidden>더 보기</button>
+    </div>
+  </section>
+</main>
+
+<footer>데이터 해석용 서비스입니다. 투자 판단의 근거로 사용하지 마세요.</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
