@@ -1,9 +1,11 @@
-/* My Data AI 비서 — 바닐라 JS 프론트엔드
+/* My Stock AI 비서 — 바닐라 JS 프론트엔드
    백엔드 주소는 config.js(window.APP_CONFIG.API_BASE_URL)에서 읽는다. */
 
 const API_BASE = ((window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || 'http://localhost:8000').replace(/\/+$/, '');
 const PAGE_SIZE = 30;
-const CHAT_TIMEOUT_MS = 60000;
+// Cody 프록시(최대 40초) 실패 후 OpenAI 폴백(최대 30초)까지 기다릴 수 있게 여유를 둔다
+const CHAT_TIMEOUT_MS = 90000;
+const KEY_LABEL = { cody: 'CODY_OPENAI_API_KEY', openai: 'OPENAI_API_KEY' };
 
 const state = {
   data: [],          // 날짜 오름차순
@@ -412,7 +414,7 @@ async function sendMessage(text) {
       state.convId = res.conversation_id;
       $('chatTitle').textContent = text.length > 30 ? text.slice(0, 30) + '…' : text;
     }
-    $('chatMeta').textContent = `요약 반영: ${res.summary_used.period} · ${res.summary_used.count}개 · ${res.summary_used.trend}`;
+    $('chatMeta').textContent = `사용 키: ${KEY_LABEL[res.key_source] || res.key_source} · 요약 반영: ${res.summary_used.period} · ${res.summary_used.count}개 · ${res.summary_used.trend}`;
     loadConversations();
   } catch (e) {
     typing.remove();

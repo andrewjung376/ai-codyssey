@@ -19,9 +19,16 @@ def _split_csv(raw: str) -> list[str]:
 
 @dataclass(frozen=True)
 class Settings:
-    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    # 1순위: Codyssey OpenAI 호환 프록시 (A1-3과 같은 방식)
+    cody_api_key: str = os.getenv("CODY_OPENAI_API_KEY", "").strip()
+    cody_base_url: str = os.getenv("CODY_BASE_URL", "https://copa.codyssey.kr/v1").rstrip("/")
+    cody_model: str = os.getenv("CODY_MODEL", "gpt-5-mini")
+    cody_timeout: float = float(os.getenv("CODY_TIMEOUT", "40"))
+    # 2순위(폴백): OpenAI 공식 API
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "").strip()
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-    # 과금 방지용 응답 토큰 상한
+    openai_timeout: float = float(os.getenv("OPENAI_TIMEOUT", "30"))
+    # 과금 방지용 응답 토큰 상한 (OpenAI 폴백 경로에 적용)
     openai_max_tokens: int = int(os.getenv("OPENAI_MAX_TOKENS", "600"))
     # JSON 문자열 그 자체 또는 키 파일 경로
     firebase_service_account: str = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "")

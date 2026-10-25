@@ -1,9 +1,23 @@
-"""GPT 호출과 컨텍스트 주입(데이터 요약 → 시스템 프롬프트)."""
+"""GPT 호출과 컨텍스트 주입(데이터 요약 → 시스템 프롬프트).
 
+호출 순서 (A1-3과 같은 방식)
+  1순위 Codyssey 프록시  CODY_OPENAI_API_KEY → {CODY_BASE_URL}/chat/completions (httpx 직접 호출)
+  2순위 OpenAI 공식 API  OPENAI_API_KEY      → openai SDK
+1순위가 401·타임아웃·빈 응답 등으로 실패하면 2순위로 다시 시도한다.
+"""
+
+import logging
 from functools import lru_cache
 from typing import Protocol
 
+import httpx
+
 from core.config import settings
+
+log = logging.getLogger(__name__)
+
+KEY_SOURCE_CODY = "cody"
+KEY_SOURCE_OPENAI = "openai"
 
 SYSTEM_TEMPLATE = """당신은 사용자의 시계열 데이터를 이해하고 있는 데이터 분석 비서입니다.
 
@@ -55,18 +69,43 @@ def build_system_prompt(summary: dict) -> str:
 
 
 class LLMClient(Protocol):
-    def complete(self, messages: list[dict]) -> str: ...
+    def complete(self, messages: list[dict]) -> tuple[str, str]:
+        """(답변, 사용한 키 소스 "cody" | "openai")"""
+        ...
 
 
 class LLMUnavailable(RuntimeError):
     pass
 
 
+class CodyProxyClient:
+    """Codyssey OpenAI 호환 프록시. openai SDK 없이 HTTP로 직접 호출한다.
+
+    gpt-5-mini 는 추론 토큰도 출력 상한에 포함돼 상한을 작게 주면 빈 답이 나올 수 있어
+    A1-3과 같이 토큰 상한을 보내지 않는다.
+    """
+
+    def __init__(self, api_key: str, base_url: str, model: str, timeout: float):
+        self._url = f"{base_url}/chat/completions"
+        self._headers = {"Authorization": f"Bearer {api_key}"}
+        self._model = model
+        self._timeout = timeout
+
+    def complete(self, messages: list[dict]) -> str:
+        res = httpx.post(self._url, headers=self._headers, timeout=self._timeout,
+                         json={"model": self._model, "messages": messages})
+        res.raise_for_status()
+        text = (res.json()["choices"][0]["message"]["content"] or "").strip()
+        if not text:
+            raise ValueError("Cody 프록시가 빈 응답을 돌려줬습니다.")
+        return text
+
+
 class OpenAIClient:
-    def __init__(self, api_key: str, model: str, max_tokens: int):
+    def __init__(self, api_key: str, model: str, max_tokens: int, timeout: float):
         from openai import OpenAI
 
-        self._client = OpenAI(api_key=api_key, timeout=30, max_retries=1)
+        self._client = OpenAI(api_key=api_key, timeout=timeout, max_retries=1)
         self._model = model
         self._max_tokens = max_tokens
 
@@ -79,9 +118,35 @@ class OpenAIClient:
         return (res.choices[0].message.content or "").strip()
 
 
+class FallbackLLM:
+    """등록 순서대로 시도하고, 처음 성공한 공급자의 답과 키 소스를 돌려준다."""
+
+    def __init__(self, providers: list[tuple[str, object]]):
+        self._providers = providers
+
+    def complete(self, messages: list[dict]) -> tuple[str, str]:
+        last_error: Exception | None = None
+        for source, client in self._providers:
+            try:
+                return client.complete(messages), source
+            except Exception as e:  # 401·429·타임아웃·형식 오류 모두 다음 공급자로
+                last_error = e
+                # 키 값은 남기지 않고 상태 코드·오류 종류만 기록한다
+                status = getattr(getattr(e, "response", None), "status_code", None)
+                log.warning("LLM 호출 실패 [%s] status=%s %s", source, status, type(e).__name__)
+        raise last_error
+
+
 @lru_cache
 def get_llm() -> LLMClient:
-    """FastAPI 의존성. 키가 없으면 채팅 요청 시점에 503을 돌려준다."""
-    if not settings.openai_api_key:
-        raise LLMUnavailable("OPENAI_API_KEY 가 설정되지 않았습니다.")
-    return OpenAIClient(settings.openai_api_key, settings.openai_model, settings.openai_max_tokens)
+    """FastAPI 의존성. 키가 하나도 없으면 채팅 요청 시점에 503을 돌려준다."""
+    providers: list[tuple[str, object]] = []
+    if settings.cody_api_key:
+        providers.append((KEY_SOURCE_CODY, CodyProxyClient(
+            settings.cody_api_key, settings.cody_base_url, settings.cody_model, settings.cody_timeout)))
+    if settings.openai_api_key:
+        providers.append((KEY_SOURCE_OPENAI, OpenAIClient(
+            settings.openai_api_key, settings.openai_model, settings.openai_max_tokens, settings.openai_timeout)))
+    if not providers:
+        raise LLMUnavailable("CODY_OPENAI_API_KEY 또는 OPENAI_API_KEY 가 설정되지 않았습니다.")
+    return FallbackLLM(providers)

@@ -1,4 +1,6 @@
-# M1-2. 내 데이터를 아는 AI 비서
+# My Stock AI 비서
+
+> M1-2 미션 "내 데이터를 아는 AI 비서 만들기" 결과물
 
 일반 챗봇은 내 데이터를 모릅니다. 이 서비스는 **삼성전자(005930.KS) 1년치 일별 종가(245개)** 를 Firestore에 저장하고,
 그 요약(기간·개수·통계·추세·월별 통계·최근 값)을 **GPT 시스템 프롬프트에 주입**해서 "최근 추세가 어때?", "가장 높았던 때는?" 같은 질문에
@@ -21,7 +23,7 @@
 | --- | --- |
 | 백엔드 | Python 3.13, FastAPI, Pydantic v2, Uvicorn |
 | DB | Firebase Firestore (`firebase-admin`) |
-| AI | OpenAI Chat Completions (`openai`, 기본 모델 `gpt-4o-mini`) |
+| AI | 1순위 Codyssey OpenAI 호환 프록시(`gpt-5-mini`, httpx) → 실패 시 OpenAI 공식 API(`openai` SDK, `gpt-4o-mini`) |
 | 프론트엔드 | HTML / CSS / JavaScript (프레임워크 없음), Chart.js |
 | 배포 | Render (백엔드), Vercel (프론트엔드) |
 
@@ -71,6 +73,12 @@ M1-2/
 - 수정 요청은 최소 1개 필드 필요, 채팅 질문은 1~2000자, 메시지 `role` 은 `user`/`assistant` 만 허용
 - 검증 실패는 422, 없는 ID는 404, 날짜 중복은 409, 키 미설정은 503, OpenAI 오류는 502로 응답합니다.
 
+### LLM 호출 순서 (키 폴백)
+1. `CODY_OPENAI_API_KEY` 가 있으면 Codyssey 프록시(`https://copa.codyssey.kr/v1/chat/completions`, `gpt-5-mini`)를 먼저 호출합니다.
+2. 이 호출이 **401·403·429·5xx·타임아웃·빈 응답** 등으로 실패하면 `OPENAI_API_KEY` 로 OpenAI 공식 API(`gpt-4o-mini`)를 다시 호출합니다.
+3. 둘 중 하나만 설정해도 동작하며, 둘 다 실패하면 502, 둘 다 없으면 503을 돌려줍니다.
+4. `/api/chat` 응답의 `key_source`(`cody` | `openai`)로 어떤 키가 쓰였는지 알 수 있고, 채팅 화면 상단에도 "사용 키"로 표시됩니다.
+
 ### 컨텍스트 주입 원리
 `/api/chat` 은 매 요청마다 `build_summary()` 로 **현재 저장된 데이터**의 요약을 다시 계산해 아래 형태의 시스템 프롬프트를 만듭니다.
 GPT는 이 프롬프트를 "사실"로 받아 답하므로, 데이터를 바꾸면 다음 질문부터 답이 달라집니다. 이어지는 대화는 직전 메시지 10개를 함께 보냅니다.
@@ -115,18 +123,20 @@ python -m http.server 5500
 ```
 
 - **Firebase 키 없이 화면만 확인**하려면 `.env` 에 `STORAGE_BACKEND=memory` 를 넣으세요. CSV 시드 데이터로 메모리에서 동작합니다(재시작 시 초기화).
-- `OPENAI_API_KEY` 가 없으면 채팅만 503으로 실패하고 나머지 기능은 동작합니다.
+- `CODY_OPENAI_API_KEY`, `OPENAI_API_KEY` 가 모두 없으면 채팅만 503으로 실패하고 나머지 기능은 동작합니다.
 - 테스트: `backend` 폴더에서 `python -m pytest`
 
 ## 환경 변수
 
 | 변수명 | 위치 | 설명 |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | 백엔드 | OpenAI API 키 (필수) |
+| `CODY_OPENAI_API_KEY` | 백엔드 | Codyssey 프록시 키 — 1순위 (이것과 `OPENAI_API_KEY` 중 하나 이상 필수) |
+| `OPENAI_API_KEY` | 백엔드 | OpenAI 공식 키 — Cody 호출 실패 시 폴백 |
+| `CODY_MODEL` | 백엔드 | 프록시 모델명, 기본 `gpt-5-mini` |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | 백엔드 | 서비스 계정 키 — JSON 문자열 또는 키 파일 경로 (필수) |
 | `ALLOWED_ORIGINS` | 백엔드 | CORS 허용 도메인, 쉼표 구분 (배포 시 Vercel URL 포함) |
-| `OPENAI_MODEL` | 백엔드 | 모델명, 기본 `gpt-4o-mini` |
-| `OPENAI_MAX_TOKENS` | 백엔드 | 응답 토큰 상한, 기본 600 (과금 방지) |
+| `OPENAI_MODEL` | 백엔드 | 폴백 모델명, 기본 `gpt-4o-mini` |
+| `OPENAI_MAX_TOKENS` | 백엔드 | 폴백 경로 응답 토큰 상한, 기본 600 (과금 방지) |
 | `STORAGE_BACKEND` | 백엔드 | `firestore`(기본) 또는 `memory` |
 | `API_BASE_URL` | 프론트(Vercel) | 백엔드 주소, 예 `https://<render-서비스>.onrender.com` |
 
@@ -141,7 +151,7 @@ python -m http.server 5500
    - Build Command: `pip install -r requirements.txt`
    - Start Command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
    - Instance Type: Free
-3. Environment: `OPENAI_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON`(키 JSON 전체를 한 줄로), `ALLOWED_ORIGINS`(Vercel URL), `PYTHON_VERSION=3.13.5`
+3. Environment: `CODY_OPENAI_API_KEY`, `OPENAI_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON`(키 JSON 전체를 한 줄로), `ALLOWED_ORIGINS`(Vercel URL), `PYTHON_VERSION=3.13.5`
 4. 배포 후 `https://<서비스>.onrender.com/docs` 에서 Swagger 확인
 
 ### 프론트엔드 — Vercel

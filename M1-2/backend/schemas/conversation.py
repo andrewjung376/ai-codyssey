@@ -51,4 +51,5 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     conversation_id: str
     reply: str
+    key_source: Literal["cody", "openai"] = Field(..., description="답변에 사용한 키: cody(CODY_OPENAI_API_KEY) | openai(OPENAI_API_KEY)")
     summary_used: dict = Field(..., description="시스템 프롬프트에 주입한 요약(기간·개수·트렌드)")

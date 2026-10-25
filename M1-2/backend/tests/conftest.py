@@ -19,7 +19,7 @@ class FakeLLM:
 
     def complete(self, messages):
         self.calls.append(messages)
-        return f"답변 #{len(self.calls)}"
+        return f"답변 #{len(self.calls)}", "cody"
 
 
 @pytest.fixture

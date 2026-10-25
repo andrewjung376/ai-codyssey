@@ -1,4 +1,4 @@
-"""내 데이터를 아는 AI 비서 — FastAPI 진입점.
+"""My Stock AI 비서 — FastAPI 진입점.
 
 로컬 실행: uvicorn main:app --reload   (backend 폴더에서)
 API 문서:  http://localhost:8000/docs
@@ -13,7 +13,7 @@ from routers import chat, conversations, data
 from services.repository import StorageUnavailable
 
 app = FastAPI(
-    title="My Data AI Assistant API",
+    title="My Stock AI 비서 API",
     description="시계열 데이터(삼성전자 일별 종가) 요약을 GPT 시스템 프롬프트에 주입해 답하는 AI 비서 API",
     version="1.0.0",
 )

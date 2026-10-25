@@ -28,7 +28,8 @@ def run_chat(repo: Repository, llm: LLMClient, message: str, conversation_id: st
     # 2) 요약을 시스템 프롬프트에 삽입 → 3) GPT 호출
     messages = [{"role": "system", "content": build_system_prompt(summary)}, *history,
                 {"role": "user", "content": message}]
-    reply = llm.complete(messages) or "답변을 생성하지 못했습니다. 다시 시도해 주세요."
+    reply, key_source = llm.complete(messages)
+    reply = reply or "답변을 생성하지 못했습니다. 다시 시도해 주세요."
 
     # 4) 대화 자동 저장
     new_msgs = [{"role": "user", "content": message}, {"role": "assistant", "content": reply}]
@@ -41,5 +42,6 @@ def run_chat(repo: Repository, llm: LLMClient, message: str, conversation_id: st
     return {
         "conversation_id": conversation_id,
         "reply": reply,
+        "key_source": key_source,
         "summary_used": {k: summary[k] for k in ("period", "count", "trend")},
     }

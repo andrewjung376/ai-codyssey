@@ -100,6 +100,7 @@ def test_chat_injects_summary_and_saves(client, llm):
     assert res.status_code == 200
     out = res.json()
     assert out["reply"] == "답변 #1"
+    assert out["key_source"] == "cody"
     assert out["summary_used"]["count"] == 25
 
     system = llm.calls[0][0]
@@ -146,7 +147,8 @@ def test_chat_without_key_returns_503(client, monkeypatch):
     from services import llm as llm_module
 
     app.dependency_overrides.pop(llm_dependency)
-    monkeypatch.setattr(llm_module, "settings", dataclasses.replace(llm_module.settings, openai_api_key=""))
+    monkeypatch.setattr(llm_module, "settings",
+                        dataclasses.replace(llm_module.settings, cody_api_key="", openai_api_key=""))
     llm_module.get_llm.cache_clear()
     try:
         assert client.post("/api/chat", json={"message": "x"}).status_code == 503
