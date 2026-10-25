@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import datetime as dt
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from schemas.data import DataCreate, DataItem, DataUpdate, Summary
 from services.repository import Repository, get_repository
@@ -20,9 +22,20 @@ def create_data(body: DataCreate, repo: Repository = Depends(get_repository)):
     return repo.create_data(item)
 
 
-@router.get("", response_model=list[DataItem], summary="데이터 목록 조회 (날짜 오름차순)")
-def list_data(repo: Repository = Depends(get_repository)):
-    return repo.list_data()
+@router.get("", response_model=list[DataItem], summary="데이터 목록 조회 (날짜 오름차순, 기간 필터 선택)")
+def list_data(
+    start: dt.date | None = Query(None, description="이 날짜 이후(포함)만, YYYY-MM-DD"),
+    end: dt.date | None = Query(None, description="이 날짜 이전(포함)만, YYYY-MM-DD"),
+    repo: Repository = Depends(get_repository),
+):
+    if start and end and start > end:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "start 가 end 보다 늦습니다.")
+    items = repo.list_data()
+    if start:
+        items = [d for d in items if d["date"] >= start.isoformat()]
+    if end:
+        items = [d for d in items if d["date"] <= end.isoformat()]
+    return items
 
 
 @router.get("/summary", response_model=Summary, summary="데이터 요약 (프롬프트 주입용)")

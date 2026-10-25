@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "my-stock-ai": {
+      "type": "stdio",
+      "command": ".venv/Scripts/python.exe",
+      "args": ["mcp_server/server.py"],
+      "env": {
+        "MYSTOCK_API_BASE_URL": "https://mystock-ai-api.onrender.com"
+      }
+    }
+  }
+}

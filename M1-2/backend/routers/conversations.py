@@ -6,9 +6,10 @@ from services.repository import Repository, get_repository
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
 
-@router.post("", response_model=ConversationDetail, status_code=status.HTTP_201_CREATED, summary="대화 저장")
+@router.post("", response_model=ConversationDetail, response_model_exclude_none=True,
+             status_code=status.HTTP_201_CREATED, summary="대화 저장")
 def create_conversation(body: ConversationCreate, repo: Repository = Depends(get_repository)):
-    messages = [m.model_dump() for m in body.messages]
+    messages = [m.model_dump(exclude_none=True) for m in body.messages]
     title = body.title or next((m["content"][:30] for m in messages if m["role"] == "user"), "새 대화")
     return repo.create_conversation(title, messages)
 
@@ -19,7 +20,8 @@ def list_conversations(repo: Repository = Depends(get_repository)):
     return repo.list_conversations()
 
 
-@router.get("/{conv_id}", response_model=ConversationDetail, summary="특정 대화 불러오기 (전체 messages)")
+@router.get("/{conv_id}", response_model=ConversationDetail, response_model_exclude_none=True,
+            summary="특정 대화 불러오기 (전체 messages, 도구 모드 답변은 tool_calls 포함)")
 def get_conversation(conv_id: str, repo: Repository = Depends(get_repository)):
     conv = repo.get_conversation(conv_id)
     if not conv:

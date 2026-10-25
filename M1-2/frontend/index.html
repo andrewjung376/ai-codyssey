@@ -78,6 +78,14 @@
           </div>
         </div>
       </div>
+      <div class="mode-bar">
+        <label class="switch" title="켜면 GPT가 필요한 데이터를 도구(function calling)로 직접 골라 조회합니다">
+          <input type="checkbox" id="toolMode" />
+          <span class="slider" aria-hidden="true"></span>
+          <span>🔧 도구 호출 모드</span>
+        </label>
+        <span class="hint" id="modeHint">끄면: 요약을 프롬프트에 미리 주입 · 켜면: GPT가 도구로 직접 조회</span>
+      </div>
       <form class="composer" id="chatForm">
         <textarea id="chatInput" rows="1" maxlength="2000" placeholder="데이터에 대해 질문하세요 (Enter 전송, Shift+Enter 줄바꿈)" required></textarea>
         <button class="btn primary" id="sendBtn" type="submit">전송</button>

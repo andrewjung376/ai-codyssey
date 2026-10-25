@@ -93,13 +93,21 @@ class CodyProxyClient:
         self._timeout = timeout
 
     def complete(self, messages: list[dict]) -> str:
-        res = httpx.post(self._url, headers=self._headers, timeout=self._timeout,
-                         json={"model": self._model, "messages": messages})
-        res.raise_for_status()
-        text = (res.json()["choices"][0]["message"]["content"] or "").strip()
+        text = (self.chat(messages).get("content") or "").strip()
         if not text:
             raise ValueError("Cody 프록시가 빈 응답을 돌려줬습니다.")
         return text
+
+    def chat(self, messages: list[dict], tools: list[dict] | None = None, tool_choice: str | None = None) -> dict:
+        """assistant 메시지 dict({role, content, tool_calls?})를 그대로 돌려준다."""
+        body = {"model": self._model, "messages": messages}
+        if tools:
+            body["tools"] = tools
+            if tool_choice:
+                body["tool_choice"] = tool_choice
+        res = httpx.post(self._url, headers=self._headers, timeout=self._timeout, json=body)
+        res.raise_for_status()
+        return res.json()["choices"][0]["message"]
 
 
 class OpenAIClient:
@@ -111,23 +119,27 @@ class OpenAIClient:
         self._max_tokens = max_tokens
 
     def complete(self, messages: list[dict]) -> str:
-        res = self._client.chat.completions.create(
-            model=self._model,
-            messages=messages,
-            max_completion_tokens=self._max_tokens,
-        )
-        return (res.choices[0].message.content or "").strip()
+        return (self.chat(messages).get("content") or "").strip()
+
+    def chat(self, messages: list[dict], tools: list[dict] | None = None, tool_choice: str | None = None) -> dict:
+        kwargs = {"model": self._model, "messages": messages, "max_completion_tokens": self._max_tokens}
+        if tools:
+            kwargs["tools"] = tools
+            if tool_choice:
+                kwargs["tool_choice"] = tool_choice
+        res = self._client.chat.completions.create(**kwargs)
+        return res.choices[0].message.model_dump(exclude_none=True)
 
 
 class FallbackLLM:
     """등록 순서대로 시도하고, 처음 성공한 공급자의 답과 키 소스를 돌려준다."""
 
     def __init__(self, providers: list[tuple[str, object]]):
-        self._providers = providers
+        self.providers = providers  # 도구 모드(services/agent.py)가 공급자별로 직접 순회한다
 
     def complete(self, messages: list[dict]) -> tuple[str, str]:
         last_error: Exception | None = None
-        for source, client in self._providers:
+        for source, client in self.providers:
             try:
                 return client.complete(messages), source
             except Exception as e:  # 401·429·타임아웃·형식 오류 모두 다음 공급자로

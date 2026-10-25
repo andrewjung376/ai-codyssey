@@ -5,7 +5,9 @@ const API_BASE = ((window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || 'http
 const PAGE_SIZE = 30;
 // Cody 프록시(최대 40초) 실패 후 OpenAI 폴백(최대 30초)까지 기다릴 수 있게 여유를 둔다
 const CHAT_TIMEOUT_MS = 90000;
-const KEY_LABEL = { cody: 'CODY_OPENAI_API_KEY', openai: 'OPENAI_API_KEY' };
+// 도구 모드는 GPT 호출이 여러 번(도구 선택 → 결과 반영) 이어져 더 오래 기다린다
+const TOOL_CHAT_TIMEOUT_MS = 150000;
+const KEY_LABEL ={ cody: 'CODY_OPENAI_API_KEY', openai: 'OPENAI_API_KEY' };
 
 const state = {
   data: [],          // 날짜 오름차순
@@ -16,6 +18,7 @@ const state = {
   editingId: null,
   chart: null,
   sending: false,
+  toolMode: false,   // 보너스 5.1: true 면 /api/chat/tools 로 보낸다
 };
 
 const $ = id => document.getElementById(id);
@@ -355,7 +358,10 @@ async function openConversation(id) {
     $('chatMeta').textContent = `불러온 대화 · 메시지 ${conv.message_count}개`;
     const box = $('messages');
     box.innerHTML = '';
-    conv.messages.forEach(m => addMessage(m.role, m.content));
+    conv.messages.forEach(m => {
+      const node = addMessage(m.role, m.content);
+      if (m.tool_calls) addToolTrace(node, m.tool_calls);
+    });
     renderConversations();
   } catch (e) {
     addMessage('error', `대화를 불러오지 못했습니다: ${e.message}`);
@@ -393,32 +399,63 @@ function addMessage(role, text) {
   return m;
 }
 
-function addTyping() {
+function addTyping(label) {
   const m = addMessage('assistant', '');
-  m.innerHTML = '<span class="typing"><span></span><span></span><span></span><em>데이터를 살펴보는 중…</em></span>';
+  m.innerHTML = '<span class="typing"><span></span><span></span><span></span><em></em></span>';
+  m.querySelector('em').textContent = label;
   return m;
+}
+
+// 도구 모드 답변 아래에 "어떤 근거로 어떤 도구를 호출했는지" 표시
+function addToolTrace(msgEl, traces) {
+  const box = el('div', 'tool-trace');
+  box.append(el('div', 'tool-trace-title', traces.length ? `🔧 호출한 도구 ${traces.length}개` : '🔧 도구 호출 없이 답변'));
+  for (const t of traces) {
+    const args = Object.entries(t.arguments || {}).map(([k, v]) => `${k}=${v}`).join(', ');
+    const row = el('div', 'tool-call' + (t.ok ? '' : ' fail'));
+    row.append(el('code', '', `${t.round}. ${t.name}(${args})`),
+      el('span', 'tool-result', `→ ${t.ok ? '' : '오류: '}${t.result_summary}`));
+    if (t.reason) row.append(el('span', 'tool-reason', `근거: ${t.reason}`));
+    box.append(row);
+  }
+  msgEl.append(box);
+  msgEl.scrollIntoView({ block: 'end', behavior: 'smooth' });
+}
+
+function syncModeHint() {
+  $('modeHint').textContent = state.toolMode
+    ? 'GPT가 질문에 필요한 데이터를 도구(function calling)로 직접 골라 조회합니다'
+    : '저장된 데이터 요약을 시스템 프롬프트에 미리 주입해 답합니다';
 }
 
 async function sendMessage(text) {
   text = text.trim();
   if (!text || state.sending) return;
+  const toolMode = state.toolMode;
   state.sending = true;
   $('sendBtn').disabled = true;
   $('chatInput').value = '';
   autoGrow();
   addMessage('user', text);
-  const typing = addTyping();
+  const typing = addTyping(toolMode ? '도구로 데이터를 조회하는 중…' : '데이터를 살펴보는 중…');
   try {
-    const res = await api('/api/chat', {
-      method: 'POST', body: { message: text, conversation_id: state.convId }, timeout: CHAT_TIMEOUT_MS,
+    const res = await api(toolMode ? '/api/chat/tools' : '/api/chat', {
+      method: 'POST', body: { message: text, conversation_id: state.convId },
+      timeout: toolMode ? TOOL_CHAT_TIMEOUT_MS : CHAT_TIMEOUT_MS,
     });
     typing.remove();
-    addMessage('assistant', res.reply);
+    const reply = addMessage('assistant', res.reply);
     if (!state.convId) {
       state.convId = res.conversation_id;
       $('chatTitle').textContent = text.length > 30 ? text.slice(0, 30) + '…' : text;
     }
-    $('chatMeta').textContent = `사용 키: ${KEY_LABEL[res.key_source] || res.key_source} · 요약 반영: ${res.summary_used.period} · ${res.summary_used.count}개 · ${res.summary_used.trend}`;
+    const key = `사용 키: ${KEY_LABEL[res.key_source] || res.key_source}`;
+    if (toolMode) {
+      addToolTrace(reply, res.tool_calls);
+      $('chatMeta').textContent = `${key} · 도구 모드 · 도구 ${res.tool_calls.length}회 호출`;
+    } else {
+      $('chatMeta').textContent = `${key} · 요약 반영: ${res.summary_used.period} · ${res.summary_used.count}개 · ${res.summary_used.trend}`;
+    }
     loadConversations();
   } catch (e) {
     typing.remove();
@@ -475,6 +512,14 @@ function bindEvents() {
   });
   $('messages').addEventListener('click', e => { if (e.target.classList.contains('chip')) sendMessage(e.target.textContent); });
   $('f-date').value = today();
+  try { state.toolMode = localStorage.getItem('toolMode') === 'on'; } catch (_) {}
+  $('toolMode').checked = state.toolMode;
+  syncModeHint();
+  $('toolMode').addEventListener('change', e => {
+    state.toolMode = e.target.checked;
+    try { localStorage.setItem('toolMode', state.toolMode ? 'on' : 'off'); } catch (_) {}
+    syncModeHint();
+  });
 }
 
 (async function init() {

@@ -162,7 +162,26 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; display: grid; gap: 20p
 .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .chip { border: 1px solid var(--border-hi); background: var(--input-bg); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: .85rem; }
 .chip:hover { border-color: var(--accent); color: var(--text); }
-.composer { display: flex; gap: 10px; border-top: 1px solid var(--border); padding-top: 12px; }
+.composer { display: flex; gap: 10px; padding-top: 10px; }
+
+/* 도구 호출 모드 토글 */
+.mode-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 10px; }
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: .88rem; user-select: none; }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch .slider { position: relative; width: 36px; height: 20px; border-radius: 999px; background: var(--border-hi); transition: background .15s; flex: none; }
+.switch .slider::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.switch input:checked + .slider { background: var(--accent); }
+.switch input:checked + .slider::after { transform: translateX(16px); }
+.switch input:focus-visible + .slider { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 도구 호출 기록 (답변 말풍선 아래) */
+.tool-trace { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border-hi); display: grid; gap: 6px; white-space: normal; }
+.tool-trace-title { font-size: .75rem; color: var(--muted); }
+.tool-call { font-size: .8rem; }
+.tool-call code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; background: var(--accent-soft); color: var(--text); padding: 1px 6px; border-radius: 6px; word-break: break-all; }
+.tool-call.fail code { background: rgba(255,90,90,.14); }
+.tool-call .tool-result { color: var(--muted); margin-left: 4px; }
+.tool-call .tool-reason { display: block; color: var(--muted); font-size: .75rem; margin-top: 2px; }
 .composer textarea {
   flex: 1; resize: none; max-height: 140px;
   background: var(--input-bg); border: 1px solid var(--border-hi); border-radius: 10px; padding: 10px 12px;
